@@ -1,10 +1,10 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import json
 import random
 import google.generativeai as genai
 import time
-import math
+import plotly.graph_objects as go
+import numpy as np
 
 # ページ設定
 st.set_page_config(page_title="🍺 AIルーレット飲みゲーム", page_icon="🍺", layout="wide")
