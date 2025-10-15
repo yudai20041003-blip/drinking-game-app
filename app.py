@@ -2,6 +2,8 @@ import streamlit as st
 import json
 import random
 import google.generativeai as genai
+import time
+import math
 
 # ページ設定
 st.set_page_config(page_title="🍺 AIルーレット飲みゲーム", page_icon="🍺", layout="wide")
@@ -70,7 +72,129 @@ def update_drunk_degree(player, multiplier):
     player['drunk_degree'] = min(player['drunk_degree'], 100)
     player['total_drunk'] += multiplier
 
-def display_status():
+def display_roulette(players, selected_index=None, spinning=False):
+    """ルーレットの表示"""
+    num_players = len(players)
+    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', 
+              '#F7DC6F', '#BB8FCE', '#85C1E2', '#F8B195', '#C06C84',
+              '#6C5B7B', '#355C7D']
+    
+    # 回転角度の計算
+    if spinning:
+        rotation = "rotate(1080deg)"  # 3回転
+        transition = "transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
+    elif selected_index is not None:
+        # 選ばれた人が上（12時の位置）に来るように回転
+        angle = -360 * (selected_index / num_players)
+        rotation = f"rotate({angle}deg)"
+        transition = "transform 3s cubic-bezier(0.17, 0.67, 0.12, 0.99)"
+    else:
+        rotation = "rotate(0deg)"
+        transition = "transform 0.3s ease"
+    
+    # HTML/CSS でルーレットを描画
+    roulette_html = f"""
+    <style>
+        .roulette-container {{
+            width: 500px;
+            height: 500px;
+            margin: 30px auto;
+            position: relative;
+        }}
+        .roulette-wheel {{
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            position: relative;
+            transform: {rotation};
+            transition: {transition};
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }}
+        .roulette-section {{
+            position: absolute;
+            width: 50%;
+            height: 50%;
+            transform-origin: 100% 100%;
+            overflow: hidden;
+        }}
+        .roulette-section-inner {{
+            width: 200%;
+            height: 200%;
+            transform-origin: 0 100%;
+            border: 2px solid white;
+        }}
+        .roulette-text {{
+            position: absolute;
+            width: 40%;
+            top: 35%;
+            left: 55%;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            transform-origin: 0 0;
+        }}
+        .arrow {{
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 40px solid #FF0000;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+            z-index: 100;
+        }}
+        .center-circle {{
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 5px solid #FFD700;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }}
+    </style>
+    <div class="roulette-container">
+        <div class="arrow"></div>
+        <div class="roulette-wheel" id="rouletteWheel">
+    """
+    
+    for i, player in enumerate(players):
+        angle = 360 / num_players
+        rotation_angle = angle * i
+        skew_angle = 90 - angle
+        color = colors[i % len(colors)]
+        
+        # テキストの回転角度を計算
+        text_rotation = rotation_angle + angle / 2
+        
+        roulette_html += f"""
+        <div class="roulette-section" style="transform: rotate({rotation_angle}deg) skewY({-skew_angle}deg);">
+            <div class="roulette-section-inner" style="background: {color}; transform: skewY({skew_angle}deg);"></div>
+            <div class="roulette-text" style="transform: rotate({text_rotation}deg) translateY(-150px);">
+                {player['name']}
+            </div>
+        </div>
+        """
+    
+    roulette_html += """
+        </div>
+        <div class="center-circle">🍺</div>
+    </div>
+    """
+    
+    return roulette_html
     """現在のステータス表示"""
     st.markdown("---")
     st.subheader("📊 現在の酔い度")
@@ -176,12 +300,41 @@ elif st.session_state.game_state == 'playing':
     
     if st.session_state.round_count < st.session_state.max_rounds:
         
+        # ルーレット表示エリア
+        roulette_placeholder = st.empty()
+        
+        # 初期状態または結果表示
+        if 'spinning' not in st.session_state:
+            st.session_state.spinning = False
+        
+        if 'selected_player_index' not in st.session_state:
+            st.session_state.selected_player_index = None
+        
+        # ルーレット表示
+        if st.session_state.spinning:
+            # 回転中
+            roulette_placeholder.markdown(display_roulette(st.session_state.players, spinning=True), unsafe_allow_html=True)
+            time.sleep(3)
+            st.session_state.spinning = False
+            st.rerun()
+        elif st.session_state.selected_player_index is not None:
+            # 結果表示
+            roulette_placeholder.markdown(display_roulette(st.session_state.players, selected_index=st.session_state.selected_player_index), unsafe_allow_html=True)
+        else:
+            # 初期状態
+            roulette_placeholder.markdown(display_roulette(st.session_state.players), unsafe_allow_html=True)
+        
         col1, col2 = st.columns([1, 2])
         
         with col1:
-            if st.button("🎡 ルーレットを回す", use_container_width=True, type="primary"):
-                # ルーレット
+            if st.button("🎡 ルーレットを回す", use_container_width=True, type="primary", disabled=st.session_state.spinning):
+                # ルーレット開始
+                st.session_state.spinning = True
+                
+                # ランダムで選択
                 selected_player = random.choice(st.session_state.players)
+                st.session_state.selected_player_index = st.session_state.players.index(selected_player)
+                
                 multiplier = calculate_drink_amount(selected_player)
                 drink_display = get_drink_display(multiplier, selected_player['cup_type'])
                 
@@ -210,8 +363,15 @@ elif st.session_state.game_state == 'playing':
                 st.session_state.round_count += 1
                 st.rerun()
         
+        with col2:
+            if st.session_state.selected_player_index is not None:
+                if st.button("➡️ 次のラウンドへ", use_container_width=True):
+                    st.session_state.selected_player_index = None
+                    st.session_state.last_selected = None
+                    st.rerun()
+        
         # 結果表示
-        if hasattr(st.session_state, 'last_selected'):
+        if hasattr(st.session_state, 'last_selected') and st.session_state.last_selected:
             st.markdown("---")
             st.success(f"🎯 選ばれた人: **{st.session_state.last_selected}**")
             st.info(f"飲む量: **{st.session_state.last_drink}**")
