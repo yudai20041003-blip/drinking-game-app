@@ -195,6 +195,22 @@ def display_roulette(players, selected_index=None, spinning=False):
     """
     
     return roulette_html
+
+def display_status():
+    """現在のステータス表示"""
+    st.markdown("---")
+    st.subheader("📊 現在の酔い度")
+    
+    sorted_players = sorted(st.session_state.players, key=lambda x: x['drunk_degree'], reverse=True)
+    
+    for i, p in enumerate(sorted_players, 1):
+        col1, col2, col3 = st.columns([2, 3, 2])
+        with col1:
+            st.write(f"**{i}. {p['name']}**")
+        with col2:
+            st.progress(p['drunk_degree'] / 100)
+        with col3:
+            st.write(f"{p['drunk_degree']:.1f}%")
     """現在のステータス表示"""
     st.markdown("---")
     st.subheader("📊 現在の酔い度")
