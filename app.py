@@ -95,80 +95,94 @@ def display_roulette(players, selected_index=None, spinning=False):
     
     # HTML/CSS でルーレットを描画
     roulette_html = f"""
-    <style>
-        .roulette-container {{
-            width: 500px;
-            height: 500px;
-            margin: 30px auto;
-            position: relative;
-        }}
-        .roulette-wheel {{
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            position: relative;
-            transform: {rotation};
-            transition: {transition};
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }}
-        .roulette-section {{
-            position: absolute;
-            width: 50%;
-            height: 50%;
-            transform-origin: 100% 100%;
-            overflow: hidden;
-        }}
-        .roulette-section-inner {{
-            width: 200%;
-            height: 200%;
-            transform-origin: 0 100%;
-            border: 2px solid white;
-        }}
-        .roulette-text {{
-            position: absolute;
-            width: 40%;
-            top: 35%;
-            left: 55%;
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-            transform-origin: 0 0;
-        }}
-        .arrow {{
-            position: absolute;
-            top: -20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border-left: 20px solid transparent;
-            border-right: 20px solid transparent;
-            border-top: 40px solid #FF0000;
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-            z-index: 100;
-        }}
-        .center-circle {{
-            position: absolute;
-            width: 80px;
-            height: 80px;
-            background: white;
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            border: 5px solid #FFD700;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }}
-    </style>
-    <div class="roulette-container">
-        <div class="arrow"></div>
-        <div class="roulette-wheel" id="rouletteWheel">
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                margin: 0;
+                padding: 0;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 600px;
+                background: transparent;
+            }}
+            .roulette-container {{
+                width: 500px;
+                height: 500px;
+                position: relative;
+            }}
+            .roulette-wheel {{
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                position: relative;
+                transform: {rotation};
+                transition: {transition};
+                box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            }}
+            .roulette-section {{
+                position: absolute;
+                width: 50%;
+                height: 50%;
+                transform-origin: 100% 100%;
+                overflow: hidden;
+            }}
+            .roulette-section-inner {{
+                width: 200%;
+                height: 200%;
+                transform-origin: 0 100%;
+                border: 2px solid white;
+            }}
+            .roulette-text {{
+                position: absolute;
+                width: 40%;
+                top: 35%;
+                left: 55%;
+                font-size: 16px;
+                font-weight: bold;
+                color: white;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+                transform-origin: 0 0;
+            }}
+            .arrow {{
+                position: absolute;
+                top: -20px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 0;
+                height: 0;
+                border-left: 20px solid transparent;
+                border-right: 20px solid transparent;
+                border-top: 40px solid #FF0000;
+                filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+                z-index: 100;
+            }}
+            .center-circle {{
+                position: absolute;
+                width: 80px;
+                height: 80px;
+                background: white;
+                border-radius: 50%;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                border: 5px solid #FFD700;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 24px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="roulette-container">
+            <div class="arrow"></div>
+            <div class="roulette-wheel" id="rouletteWheel">
     """
     
     for i, player in enumerate(players):
@@ -181,18 +195,20 @@ def display_roulette(players, selected_index=None, spinning=False):
         text_rotation = rotation_angle + angle / 2
         
         roulette_html += f"""
-        <div class="roulette-section" style="transform: rotate({rotation_angle}deg) skewY({-skew_angle}deg);">
-            <div class="roulette-section-inner" style="background: {color}; transform: skewY({skew_angle}deg);"></div>
-            <div class="roulette-text" style="transform: rotate({text_rotation}deg) translateY(-150px);">
-                {player['name']}
+            <div class="roulette-section" style="transform: rotate({rotation_angle}deg) skewY({-skew_angle}deg);">
+                <div class="roulette-section-inner" style="background: {color}; transform: skewY({skew_angle}deg);"></div>
+                <div class="roulette-text" style="transform: rotate({text_rotation}deg) translateY(-150px);">
+                    {player['name']}
+                </div>
             </div>
-        </div>
         """
     
     roulette_html += """
+            </div>
+            <div class="center-circle">🍺</div>
         </div>
-        <div class="center-circle">🍺</div>
-    </div>
+    </body>
+    </html>
     """
     
     return roulette_html
