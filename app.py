@@ -5,6 +5,7 @@ import google.generativeai as genai
 import time
 import plotly.graph_objects as go
 import numpy as np
+import textwrap  # 重要：この行を追加
 
 # ページ設定
 st.set_page_config(page_title="🍶 AIルーレット飲みゲーム", page_icon="🍶", layout="wide")
@@ -46,77 +47,78 @@ def inject_css_once():
     if st.session_state._css_injected:
         return
     
-    st.markdown("""
-<style>
-.roulette-container {
-    width: 500px;
-    height: 500px;
-    position: relative;
-    margin: 0 auto;
-}
-.roulette-wheel {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    position: relative;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-}
-.roulette-section {
-    position: absolute;
-    width: 50%;
-    height: 50%;
-    transform-origin: 100% 100%;
-    overflow: hidden;
-}
-.roulette-section-inner {
-    width: 200%;
-    height: 200%;
-    transform-origin: 0 100%;
-    border: 2px solid white;
-}
-.roulette-text {
-    position: absolute;
-    width: 40%;
-    top: 35%;
-    left: 55%;
-    font-size: 16px;
-    font-weight: bold;
-    color: white;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-    transform-origin: 0 0;
-}
-.arrow {
-    position: absolute;
-    top: -20px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 20px solid transparent;
-    border-right: 20px solid transparent;
-    border-top: 40px solid #FF0000;
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-    z-index: 100;
-}
-.center-circle {
-    position: absolute;
-    width: 80px;
-    height: 80px;
-    background: white;
-    border-radius: 50%;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    border: 5px solid #FFD700;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-}
-</style>
-""", unsafe_allow_html=True)
+    # textwrap.dedentを適用してインデント問題を解決
+    st.markdown(textwrap.dedent("""
+    <style>
+    .roulette-container {
+        width: 500px;
+        height: 500px;
+        position: relative;
+        margin: 0 auto;
+    }
+    .roulette-wheel {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        position: relative;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    }
+    .roulette-section {
+        position: absolute;
+        width: 50%;
+        height: 50%;
+        transform-origin: 100% 100%;
+        overflow: hidden;
+    }
+    .roulette-section-inner {
+        width: 200%;
+        height: 200%;
+        transform-origin: 0 100%;
+        border: 2px solid white;
+    }
+    .roulette-text {
+        position: absolute;
+        width: 40%;
+        top: 35%;
+        left: 55%;
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        transform-origin: 0 0;
+    }
+    .arrow {
+        position: absolute;
+        top: -20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 20px solid transparent;
+        border-right: 20px solid transparent;
+        border-top: 40px solid #FF0000;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
+        z-index: 100;
+    }
+    .center-circle {
+        position: absolute;
+        width: 80px;
+        height: 80px;
+        background: white;
+        border-radius: 50%;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        border: 5px solid #FFD700;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+    </style>
+    """), unsafe_allow_html=True)
     
     st.session_state._css_injected = True
 
@@ -187,12 +189,12 @@ def display_roulette(players, selected_index=None, spinning=False):
         rotation = "rotate(0deg)"
         transition = "transform 0.3s ease"
 
-    # div要素のみを生成（完全なHTML文書構造は除去）
-    roulette_html = f"""
-<div class="roulette-container">
-    <div class="arrow"></div>
-    <div class="roulette-wheel" style="transform: {rotation}; transition: {transition};">
-"""
+    # textwrap.dedentを適用してインデント問題を解決
+    roulette_html = textwrap.dedent(f"""
+    <div class="roulette-container">
+        <div class="arrow"></div>
+        <div class="roulette-wheel" style="transform: {rotation}; transition: {transition};">
+    """)
     
     for i, player in enumerate(players):
         angle = 360 / num_players
@@ -201,20 +203,22 @@ def display_roulette(players, selected_index=None, spinning=False):
         color = colors[i % len(colors)]
         text_rotation = rotation_angle + angle / 2
         
-        roulette_html += f"""
+        # 各セクションでもtextwrap.dedentを適用
+        roulette_html += textwrap.dedent(f"""
         <div class="roulette-section" style="transform: rotate({rotation_angle}deg) skewY({-skew_angle}deg);">
             <div class="roulette-section-inner" style="background: {color}; transform: skewY({skew_angle}deg) rotate({skew_angle}deg);"></div>
             <div class="roulette-text" style="transform: rotate({text_rotation}deg) translateY(-150px);">
                 {player['name']}
             </div>
         </div>
-"""
+        """)
     
-    roulette_html += """
+    # 終了部分でもtextwrap.dedentを適用
+    roulette_html += textwrap.dedent("""
         <div class="center-circle">🍶</div>
     </div>
-</div>
-"""
+    </div>
+    """)
     return roulette_html
 
 def display_status():
@@ -325,7 +329,7 @@ elif st.session_state.game_state == 'playing':
         # ルーレット表示エリア
         roulette_placeholder = st.empty()
         
-        # ルーレット表示
+        # ルーレット表示（unsafe_allow_html=Trueを確実に指定）
         if st.session_state.spinning:
             roulette_placeholder.markdown(display_roulette(st.session_state.players, spinning=True), unsafe_allow_html=True)
             time.sleep(3)
