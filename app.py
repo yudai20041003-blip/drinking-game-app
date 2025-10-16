@@ -1,4 +1,4 @@
-import streamlit as st
+>import streamlit as st
 import streamlit.components.v1 as components
 import random
 import time
@@ -64,7 +64,7 @@ def update_drunk_degree(player, multiplier):
     player['total_drunk'] += multiplier
 
 def create_roulette_html(players, selected_index=None, spinning=False):
-    """美しく回転するルーレットのHTML生成"""
+    """名前がルーレットと完璧に連動する美しいルーレット"""
     num_players = len(players)
     colors = ['#FF6666', '#4ECDCA', '#4587D1', '#FFA07A', '#98D8C8',
               '#F7DC6F', '#88BFCE', '#B5C1E2', '#B8B195', '#C8C6B4',
@@ -89,23 +89,25 @@ def create_roulette_html(players, selected_index=None, spinning=False):
         target_angle = -(selected_index * angle_per_section + angle_per_section / 2)
         if spinning:
             # スピン時は3-5回転を追加
-            total_rotation = target_angle + (random.randint(1080, 1800))  # 3-5回転
+            total_rotation = target_angle + random.randint(1080, 1800)  # 3-5回転
         else:
             total_rotation = target_angle
     else:
         total_rotation = 0
     
-    # プレイヤー名のラベル生成
+    # プレイヤー名のラベル生成（CSS変数を使用した洗練されたアプローチ）
     labels_html = ""
     for i, player in enumerate(players):
+        # セクション中央の角度を計算
         label_angle = i * angle_per_section + angle_per_section / 2
         # 名前をHTMLエスケープ
         name = str(player['name']).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
+        # CSS変数を使用してエレガントに配置
         labels_html += f"""
-        <div class="player-label" style="
-            transform: rotate({label_angle}deg) translateY(-180px) rotate({-label_angle}deg);
-        ">{name}</div>
+        <div class="player-label" style="--angle: {label_angle}deg;">
+            <span>{name}</span>
+        </div>
         """
     
     # 完全なHTML文書
@@ -130,39 +132,6 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             width: 480px;
             height: 480px;
         }}
-        .roulette-wheel {{
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: conic-gradient({gradient});
-            border: 4px solid #333;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            position: relative;
-            transition: transform 0.1s ease;
-        }}
-        .labels-container {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-        }}
-        .player-label {{
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform-origin: center center;
-            color: white;
-            font-weight: bold;
-            font-size: 16px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            white-space: nowrap;
-            text-align: center;
-            max-width: 100px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }}
         .arrow {{
             position: absolute;
             top: -20px;
@@ -173,16 +142,56 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             border-left: 20px solid transparent;
             border-right: 20px solid transparent;
             border-top: 40px solid #e74c3c;
-            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-            z-index: 10;
+            filter: drop-shadow(0 6px 12px rgba(0,0,0,0.4));
+            z-index: 30;
+        }}
+        /* 回転するルーレット本体 */
+        #wheel {{
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: conic-gradient({gradient});
+            border: 4px solid #333;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+            overflow: visible;
+            transform: rotate(0deg);
+            transition: transform 0.1s ease;
+            z-index: 5;
+        }}
+        /* プレイヤー名ラベル（ルーレットの子要素として回転） */
+        .player-label {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            /* CSS変数を使用した洗練された配置 */
+            transform: rotate(var(--angle)) translateY(-190px) rotate(calc(-1 * var(--angle)));
+            transform-origin: center center;
+            pointer-events: none;
+        }}
+        .player-label span {{
+            display: inline-block;
+            padding: 4px 12px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+            text-shadow: 2px 2px 6px rgba(0,0,0,0.9);
+            white-space: nowrap;
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
         }}
         .center-circle {{
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 80px;
-            height: 80px;
+            width: 84px;
+            height: 84px;
             background: linear-gradient(135deg, #f39c12, #e67e22);
             border: 4px solid white;
             border-radius: 50%;
@@ -190,18 +199,20 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             align-items: center;
             justify-content: center;
             font-size: 28px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 5;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+            z-index: 20;
         }}
     </style>
 </head>
 <body>
     <div class="roulette-container">
         <div class="arrow"></div>
-        <div id="wheel" class="roulette-wheel"></div>
-        <div class="labels-container">
+        
+        <!-- 重要：ラベルをルーレット内部に配置 -->
+        <div id="wheel">
             {labels_html}
         </div>
+        
         <div class="center-circle">🍶</div>
     </div>
     
@@ -212,11 +223,11 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             const targetRotation = {total_rotation};
             
             if (spinning) {{
-                // アニメーション開始
+                // スピン開始時の設定
                 wheel.style.transition = 'none';
                 wheel.style.transform = 'rotate(0deg)';
                 
-                // 次フレームでアニメーション実行
+                // スムーズなアニメーション開始
                 requestAnimationFrame(() => {{
                     requestAnimationFrame(() => {{
                         wheel.style.transition = 'transform 3s cubic-bezier(0.25, 0.1, 0.25, 1)';
@@ -225,7 +236,7 @@ def create_roulette_html(players, selected_index=None, spinning=False):
                 }});
             }} else {{
                 // 静止状態
-                wheel.style.transition = 'transform 0.5s ease';
+                wheel.style.transition = 'transform 0.5s ease-out';
                 wheel.style.transform = `rotate(${{targetRotation}}deg)`;
             }}
         }})();
