@@ -268,6 +268,37 @@ def create_circle_mask(img, size=(96, 96)):
     result.paste(img_rgba, (0, 0), mask)
     return result
 
+def apply_ghibli_color_tone(img):
+    """ジブリ風の温かく柔らかい色調を適用"""
+    # 色相を少し暖色寄りに
+    img_array = np.array(img, dtype=np.float32)
+    
+    # 赤みを少し増やして温かみを
+    img_array[:, :, 0] = np.clip(img_array[:, :, 0] * 1.08, 0, 255)
+    
+    # 青みを少し抑える
+    img_array[:, :, 2] = np.clip(img_array[:, :, 2] * 0.95, 0, 255)
+    
+    # 全体的に少し明るく
+    img_array = np.clip(img_array * 1.05, 0, 255)
+    
+    return Image.fromarray(img_array.astype(np.uint8))
+
+def create_watercolor_effect(img):
+    """水彩画風の効果を作成"""
+    # 複数回のバイラテラルフィルタで水彩画風に
+    img_array = np.array(img)
+    
+    # エッジを保持しながらスムージング
+    for _ in range(2):
+        img = img.filter(ImageFilter.SMOOTH_MORE)
+    
+    # 少し色を淡くする
+    enhancer = ImageEnhance.Color(img)
+    img = enhancer.enhance(0.9)
+    
+    return img
+
 def generate_enhanced_anime_avatar(image_file, style="anime_pro"):
     """高度なアニメ風アバター生成（本人らしさ保持+誇張表現）"""
     try:
@@ -286,7 +317,42 @@ def generate_enhanced_anime_avatar(image_file, style="anime_pro"):
         # 処理用サイズにリサイズ
         img = img.resize((128, 128), Image.Resampling.LANCZOS)
         
-        if style == "anime_pro":
+        if style == "ghibli":
+            # **ジブリ風処理**
+            
+            # 1. 水彩画風のスムージング
+            img = create_watercolor_effect(img)
+            
+            # 2. ジブリらしい温かい色調
+            img = apply_ghibli_color_tone(img)
+            
+            # 3. 軽いポスタリゼーション（ジブリは色数が多めなので緩め）
+            img = apply_posterization(img, levels=6)
+            
+            # 4. 優しいエッジ（ジブリは輪郭線が柔らかい）
+            edges = create_anime_edges(img, threshold=50)
+            edges_inverted = ImageOps.invert(edges)
+            
+            # エッジを薄めに適用
+            img_array = np.array(img)
+            edges_array = np.array(edges_inverted) / 255.0
+            
+            for i in range(3):
+                img_array[:, :, i] = img_array[:, :, i] * (0.7 + 0.3 * edges_array)
+            
+            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+            
+            # 5. 柔らかさを追加
+            img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+            
+            # 6. 全体的に明度とコントラストを調整
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(1.1)
+            
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.15)
+            
+        elif style == "anime_pro":
             # **プロ級アニメ風処理**
             
             # 1. 最初に軽くスムージングで細かいノイズを除去
@@ -790,7 +856,15 @@ if st.session_state.game_state == 'menu':
             st.markdown("""
             **新しい高度なアニメ風アバター生成の特徴:**
             
-            **🌟 アニメプロ版** (推奨):
+            **🌿 ジブリ風** (NEW!):
+            - 温かく柔らかい色調
+            - 水彩画のような優しいタッチ
+            - ノスタルジックな雰囲気
+            - 自然な肌の質感
+            - 優しい輪郭線
+            - まるでジブリ映画のキャラクターのような仕上がり
+            
+            **🌟 アニメプロ版**:
             - 本人の特徴を保持しつつ誇張表現
             - セル画風の色数制限処理
             - アニメらしい強い輪郭線
@@ -926,14 +1000,15 @@ elif st.session_state.game_state == 'input_players':
                 with col_style:
                     avatar_style = st.selectbox(
                         "アニメアバタースタイル",
-                        ["anime_pro", "anime_vibrant", "anime_soft"],
+                        ["ghibli", "anime_pro", "anime_vibrant", "anime_soft"],
                         format_func=lambda x: {
+                            "ghibli": "🌿 ジブリ風（NEW!）",
                             "anime_pro": "🌟 アニメプロ版（推奨）",
                             "anime_vibrant": "✨ 超鮮やかアニメ版",
                             "anime_soft": "🌸 ソフトアニメ版"
                         }[x],
                         key=f"style_{i}",
-                        index=0  # デフォルトをアニメプロ版に
+                        index=0  # デフォルトをジブリ風に
                     )
                 
                 with col_generate:
@@ -969,6 +1044,7 @@ elif st.session_state.game_state == 'input_players':
                     
                     # 詳細説明
                     style_descriptions = {
+                        "ghibli": "🌿 温かく柔らかい色調と水彩画のような優しいタッチで、まるでジブリ映画のキャラクターのような仕上がり",
                         "anime_pro": "本人の特徴を保持しつつ、セル画風の色数制限と強い輪郭線でアニメらしく誇張",
                         "anime_vibrant": "極端に鮮やかな色彩で派手で目立つインパクト重視のスタイル",
                         "anime_soft": "優しいパステル調でソフトで上品な仕上がり"
