@@ -222,25 +222,10 @@ def process_photo_for_roulette(image_file):
     """写真をそのままルーレット用に変換（円形クロップのみ）"""
     return image_to_base64(image_file, max_size=(96, 96))
 
-# ゲームロジック関数群（変更なし）
+# ゲームロジック関数群
 def calculate_drink_amount(player, multiplier_factor=1.0):
-    """飲み量を計算（倍率対応）"""
-    strength = player['strength']
-    preference = player['preference']
-    
-    if strength <= 2:
-        if preference <= 2: base_multiplier = 0.5
-        elif preference == 3: base_multiplier = 0.75
-        else: base_multiplier = 1.0
-    elif strength == 3:
-        if preference <= 2: base_multiplier = 0.75
-        elif preference == 3: base_multiplier = 1.0
-        else: base_multiplier = 1.5
-    else:
-        if preference <= 3: base_multiplier = 1.5
-        else: base_multiplier = 2.0
-    
-    return base_multiplier * multiplier_factor
+    """飲み量を計算（シンプル版）"""
+    return 1.0 * multiplier_factor
 
 def get_drink_display(multiplier, cup_type):
     """飲み物の表示"""
@@ -607,16 +592,33 @@ if st.session_state.game_state == 'menu':
         ### 🎯 ゲームの目的
         このゲームは、**完全ランダムルーレット**で盛り上がる飲みゲームです！
         
-        **✨ 新機能追加:**
+        **✨ 新機能:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
         - **🗣️ 口頭クイズシステム**: 最後の1人が飲むサバイバルクイズ
         - **📸 顔写真ルーレット**: 写真をアップロードしてルーレットに表示
         - **🎲 完全ランダム選択**: 誰が選ばれるか予測不可能！
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
-        - お酒の強さと好き嫌いに応じて飲み量を調整
+        - **🍶 シンプルルール**: みんな平等に1杯ずつ！
         - 15ラウンドのルーレット
         - 突発イベントもあり！
         """)
+        
+        with st.expander("🤖 AI機能（Gemini API）について", expanded=False):
+            st.markdown("""
+            **AI機能が有効な場合:**
+            - 🤖 AIが毎回新しいクイズを自動生成
+            - 🎯 一般常識、雑学、豆知識など多様なジャンル
+            - 🎉 何度遊んでも飽きない
+            
+            **AI機能が無効な場合（現在）:**
+            - 📝 固定クイズリストから出題（10問程度）
+            - 繰り返し遊ぶと同じクイズが出る
+            
+            **有効化する方法:**
+            - Streamlit Cloudの環境変数に`GEMINI_API_KEY`を設定
+            - Google AI StudioでAPIキーを取得
+            - 固定クイズでも十分楽しめます！
+            """)
         
         with st.expander("📸 顔写真ルーレット機能について", expanded=False):
             st.markdown("""
@@ -696,18 +698,12 @@ elif st.session_state.game_state == 'input_players':
     for i in range(num_players):
         with st.expander(f"プレイヤー {i+1}", expanded=True):
             # 基本情報
-            col1, col2, col3, col4 = st.columns(4)
+            col1, col2 = st.columns(2)
             
             with col1:
                 name = st.text_input("名前", key=f"name_{i}", value=f"プレイヤー{i+1}")
             
             with col2:
-                strength = st.slider("お酒の強さ", 1, 5, 3, key=f"strength_{i}")
-            
-            with col3:
-                preference = st.slider("お酒の好き嫌い", 1, 5, 3, key=f"preference_{i}")
-            
-            with col4:
                 cup_type = st.selectbox("基準量", ['おちょこ', 'ジョッキ', 'どちらも'], key=f"cup_{i}")
             
             # 顔写真設定
@@ -744,8 +740,6 @@ elif st.session_state.game_state == 'input_players':
             
             players_temp.append({
                 'name': name,
-                'strength': strength,
-                'preference': preference,
                 'cup_type': cup_type,
                 'total_drunk': 0,
                 'drunk_degree': 0,
