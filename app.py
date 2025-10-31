@@ -4,8 +4,9 @@ import random
 import time
 import json
 import base64
-from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageEnhance
 from io import BytesIO
+import numpy as np
 
 # AIモジュール（オプション）
 try:
@@ -106,15 +107,35 @@ st.markdown("""
         border-color: rgba(255,0,0,0.6);
     }
     
-    /* アバタープレビュー */
+    /* アバタープレビュー強化 */
     .avatar-preview {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 10px;
+        gap: 15px;
+        padding: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        margin: 10px 0;
+        color: white;
+    }
+    
+    .avatar-comparison {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+        justify-content: center;
+        margin: 15px 0;
+        padding: 15px;
         background: rgba(0,0,0,0.05);
+        border-radius: 12px;
+    }
+    
+    .avatar-item {
+        text-align: center;
+        padding: 10px;
+        background: rgba(255,255,255,0.1);
         border-radius: 8px;
-        margin: 5px 0;
+        min-width: 100px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -162,7 +183,54 @@ def init_session_state():
 
 init_session_state()
 
-# 画像処理・アバター生成関数群
+# 高度なアニメ風画像処理関数群
+def enhance_anime_colors(img, intensity=1.5):
+    """アニメ風の鮮やかな色彩に強化"""
+    # 彩度を大幅に上げる
+    enhancer = ImageEnhance.Color(img)
+    img = enhancer.enhance(intensity)
+    
+    # コントラストを調整
+    enhancer = ImageEnhance.Contrast(img)
+    img = enhancer.enhance(1.3)
+    
+    # 明度を少し上げて明るく
+    enhancer = ImageEnhance.Brightness(img)
+    img = enhancer.enhance(1.1)
+    
+    return img
+
+def create_anime_edges(img, threshold=30):
+    """アニメ風の強い輪郭線を作成"""
+    # グレースケールに変換してエッジ検出
+    gray = img.convert('L')
+    edges = gray.filter(ImageFilter.FIND_EDGES)
+    
+    # エッジを二値化して強調
+    edges = edges.point(lambda p: 255 if p > threshold else 0)
+    
+    # エッジを少し太くする
+    edges = edges.filter(ImageFilter.MaxFilter(size=3))
+    
+    return edges
+
+def apply_posterization(img, levels=6):
+    """ポスタリゼーション（色数制限）でセル画風に"""
+    # 各チャンネルのビット数を制限
+    bits = max(1, min(8, levels))
+    return ImageOps.posterize(img, bits)
+
+def smooth_anime_texture(img):
+    """アニメらしい滑らかな質感を作成"""
+    # 複数回のスムージングで滑らかに
+    img = img.filter(ImageFilter.SMOOTH)
+    img = img.filter(ImageFilter.SMOOTH_MORE)
+    
+    # ガウシアンブラーで更に滑らかに
+    img = img.filter(ImageFilter.GaussianBlur(radius=0.8))
+    
+    return img
+
 def image_to_base64(image_file, max_size=(96, 96)):
     """画像をBase64エンコードして保存用に変換"""
     try:
@@ -200,8 +268,8 @@ def create_circle_mask(img, size=(96, 96)):
     result.paste(img_rgba, (0, 0), mask)
     return result
 
-def generate_lightweight_avatar(image_file, style="cartoon"):
-    """軽量AIアバター生成（外部API不要）"""
+def generate_enhanced_anime_avatar(image_file, style="anime_pro"):
+    """高度なアニメ風アバター生成（本人らしさ保持+誇張表現）"""
     try:
         img = Image.open(image_file)
         img = img.convert('RGB')
@@ -215,41 +283,99 @@ def generate_lightweight_avatar(image_file, style="cartoon"):
         bottom = (height + min_size) / 2
         img = img.crop((left, top, right, bottom))
         
-        if style == "pixel":
-            # ピクセルアート風
-            small = img.resize((24, 24), Image.NEAREST)
-            stylized = small.resize((96, 96), Image.NEAREST)
-        elif style == "mono":
-            # モノクローム風
-            stylized = ImageOps.posterize(img.resize((96, 96)), bits=4)
-            stylized = ImageOps.autocontrast(stylized)
-            gray = ImageOps.grayscale(stylized)
-            stylized = ImageOps.colorize(gray, black="#2c3e50", white="#ecf0f1")
+        # 処理用サイズにリサイズ
+        img = img.resize((128, 128), Image.Resampling.LANCZOS)
+        
+        if style == "anime_pro":
+            # **プロ級アニメ風処理**
+            
+            # 1. 最初に軽くスムージングで細かいノイズを除去
+            img = smooth_anime_texture(img)
+            
+            # 2. 色彩を鮮やかに強化（アニメらしい色合い）
+            img = enhance_anime_colors(img, intensity=1.6)
+            
+            # 3. ポスタリゼーションでセル画風の色数制限
+            img = apply_posterization(img, levels=5)
+            
+            # 4. エッジ検出と強調
+            edges = create_anime_edges(img, threshold=25)
+            
+            # 5. エッジを元画像に合成
+            # エッジを反転させて黒い線にする
+            edges_inverted = ImageOps.invert(edges)
+            
+            # エッジ部分を暗くする効果
+            img_array = np.array(img)
+            edges_array = np.array(edges_inverted) / 255.0
+            
+            # エッジ部分を暗くしてアニメの輪郭線効果
+            for i in range(3):  # RGB各チャンネル
+                img_array[:, :, i] = img_array[:, :, i] * (0.3 + 0.7 * edges_array)
+            
+            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
+            
+            # 6. 最終的な色調整
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(1.2)
+            
+        elif style == "anime_vibrant":
+            # **超鮮やかアニメ風**
+            
+            # 極端に鮮やかな色彩
+            img = enhance_anime_colors(img, intensity=2.0)
+            
+            # 強いポスタリゼーション
+            img = apply_posterization(img, levels=4)
+            
+            # 明度を上げて明るく
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(1.2)
+            
+            # エッジ強調
+            edges = create_anime_edges(img, threshold=20)
+            img = Image.blend(img, ImageOps.colorize(edges, black="#000000", white="#ffffff").convert('RGB'), alpha=0.15)
+            
+        elif style == "anime_soft":
+            # **ソフトアニメ風**
+            
+            # 優しい色調整
+            img = enhance_anime_colors(img, intensity=1.2)
+            
+            # 軽いポスタリゼーション
+            img = apply_posterization(img, levels=7)
+            
+            # 大きくスムージング
+            img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
+            
+            # 軽いエッジ
+            edges = create_anime_edges(img, threshold=40)
+            img = Image.blend(img, ImageOps.colorize(edges, black="#000000", white="#ffffff").convert('RGB'), alpha=0.08)
+            
         else:
-            # カートゥーン風（デフォルト）
-            img = img.resize((96, 96))
-            # 色数を減らす
+            # デフォルト（従来のカートゥーン風）
             quantized = img.quantize(colors=12).convert('RGB')
-            # エッジを強調
             edges = img.filter(ImageFilter.FIND_EDGES)
             edges = ImageOps.autocontrast(edges.convert('L'))
             edges = edges.point(lambda p: 0 if p < 50 else 255)
             edges_rgb = ImageOps.colorize(edges, black="#000000", white="#ffffff")
-            # 合成
-            stylized = Image.blend(quantized, edges_rgb.convert('RGB'), alpha=0.1)
+            img = Image.blend(quantized, edges_rgb.convert('RGB'), alpha=0.1)
+        
+        # 最終サイズ調整
+        img = img.resize((96, 96), Image.Resampling.LANCZOS)
         
         # 円形クロップ
-        circular = create_circle_mask(stylized)
+        circular = create_circle_mask(img)
         
         buffered = BytesIO()
         circular.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode()
         
     except Exception as e:
-        st.error(f"アバター生成エラー: {e}")
+        st.error(f"アニメアバター生成エラー: {e}")
         return None
 
-# ゲームロジック関数群
+# ゲームロジック関数群（変更なし）
 def calculate_drink_amount(player, multiplier_factor=1.0):
     """飲み量を計算（倍率対応）"""
     strength = player['strength']
@@ -386,7 +512,7 @@ def generate_ai_quiz_batch(num_quizzes):
         return random.choices(fallback_quizzes, k=num_quizzes)
 
 def create_roulette_html(players, selected_index=None, spinning=False):
-    """アバター対応のスマホ完全対応ルーレット"""
+    """高度なアニメアバター対応のスマホ完全対応ルーレット"""
     num_players = len(players)
     colors = ['#FF6666', '#4ECDCA', '#4587D1', '#FFA07A', '#98D8C8',
               '#F7DC6F', '#88BFCE', '#B5C1E2', '#B8B195', '#C8C6B4',
@@ -412,14 +538,14 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     else:
         total_rotation = 0
     
-    # アバター対応ラベル生成
+    # 高度なアニメアバター対応ラベル生成
     labels_html = ""
     for i, player in enumerate(players):
         label_angle = i * angle_per_section + angle_per_section / 2
         name = str(player['name']).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
         if player.get('avatar_base64'):
-            # アバターがある場合
+            # 高度なアニメアバターがある場合
             labels_html += f"""
             <div class="player-avatar" style="--angle: {label_angle}deg;">
                 <img src="data:image/png;base64,{player['avatar_base64']}" alt="{name}" class="avatar-image"/>
@@ -520,23 +646,27 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             text-align: center;
         }}
         .avatar-image {{
-            width: clamp(50px, 10vw, 70px);
-            height: clamp(50px, 10vw, 70px);
+            width: clamp(55px, 12vw, 85px);
+            height: clamp(55px, 12vw, 85px);
             border-radius: 50%;
-            border: 3px solid white;
+            border: 4px solid white;
             object-fit: cover;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
             display: block;
-            margin: 0 auto 5px auto;
+            margin: 0 auto 6px auto;
+            /* アニメアバター用の追加効果 */
+            filter: contrast(1.15) saturate(1.3) brightness(1.05);
         }}
         .name-overlay {{
-            background: rgba(0,0,0,0.8);
+            background: linear-gradient(135deg, rgba(0,0,0,0.9), rgba(50,50,50,0.9));
             color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: clamp(8px, 1.8vw, 12px);
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: clamp(9px, 2.2vw, 14px);
             font-weight: bold;
             white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            border: 2px solid rgba(255,255,255,0.4);
         }}
         .center-circle {{
             position: absolute;
@@ -565,12 +695,13 @@ def create_roulette_html(players, selected_index=None, spinning=False):
         
         @media (max-width: 480px) {{
             .avatar-image {{
-                width: 40px;
-                height: 40px;
+                width: 45px;
+                height: 45px;
+                border-width: 2px;
             }}
             .name-overlay {{
                 font-size: 8px;
-                padding: 1px 4px;
+                padding: 2px 6px;
             }}
         }}
     </style>
@@ -612,7 +743,7 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     return html_content
 
 def display_status():
-    """アバター対応のステータス表示"""
+    """高度なアニメアバター対応のステータス表示"""
     st.markdown("---")
     st.subheader("📊 現在の酔い度")
     
@@ -622,7 +753,7 @@ def display_status():
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
             if p.get('avatar_base64'):
-                st.image(base64.b64decode(p['avatar_base64']), width=40)
+                st.image(base64.b64decode(p['avatar_base64']), width=50)
             st.write(f"**{i}. {p['name']}**")
         with col2:
             st.progress(p['drunk_degree'] / 100)
@@ -631,7 +762,7 @@ def display_status():
 
 # メインアプリケーション
 st.title("🍶 AIルーレット飲みゲーム")
-st.caption("スマホ対応・口頭クイズ＆AIアバター機能付き！")
+st.caption("スマホ対応・口頭クイズ＆高度なアニメアバター機能付き！")
 
 # メニュー画面
 if st.session_state.game_state == 'menu':
@@ -647,7 +778,7 @@ if st.session_state.game_state == 'menu':
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
         - **🗣️ 口頭クイズシステム**: 人数-2問で早抜けゲーム
-        - **🤖 軽量AIアバター生成**: 外部API不要で即座に生成
+        - **🎨 高度なアニメアバター生成**: 誇張していても本人とわかるアニメ風変換
         - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
@@ -655,16 +786,31 @@ if st.session_state.game_state == 'menu':
         - 突発イベントもあり！
         """)
         
-        with st.expander("🎨 AIアバター機能について", expanded=False):
+        with st.expander("🎨 高度なアニメアバター機能について", expanded=False):
             st.markdown("""
-            **軽量AIアバター生成の特徴:**
-            - **外部API不要**: 追加費用なし
-            - **即座に生成**: リアルタイム処理
-            - **3つのスタイル**:
-              - カートゥーン風（色数削減+エッジ強調）
-              - ピクセルアート風（レトロゲーム風）
-              - モノクローム風（グレースケール）
-            - **プライバシー配慮**: 写真はセッション内のみ保持
+            **新しい高度なアニメ風アバター生成の特徴:**
+            
+            **🌟 アニメプロ版** (推奨):
+            - 本人の特徴を保持しつつ誇張表現
+            - セル画風の色数制限処理
+            - アニメらしい強い輪郭線
+            - 鮮やかで美しい色彩調整
+            - 滑らかなアニメ質感
+            
+            **✨ 超鮮やかアニメ版**:
+            - 極端に鮮やかな色彩
+            - より派手で目立つスタイル
+            - インパクト重視
+            
+            **🌸 ソフトアニメ版**:
+            - 優しいパステル調
+            - ソフトで上品な仕上がり
+            - 落ち着いた印象
+            
+            **特徴:**
+            - 外部API不要で即座に生成
+            - 本人の特徴を残しつつアニメ風に誇張
+            - プライバシー配慮（セッション内のみ保持）
             """)
         
         with st.expander("🌐 リモートプレイの方法", expanded=False):
@@ -675,7 +821,8 @@ if st.session_state.game_state == 'menu':
             2. **Zoom/Meet/Discord**などで画面を共有
             3. 参加者は共有画面を見ながら**音声**で参加
             4. 顔写真は事前に送ってもらうか、リモートで撮影指示
-            5. クイズは口頭で答える → マスターが正解ボタンを押す
+            5. アニメアバターで本人確認も楽しい
+            6. クイズは口頭で答える → マスターが正解ボタンを押す
             """)
     
     with col2:
@@ -687,8 +834,8 @@ if st.session_state.game_state == 'menu':
             st.info("ℹ️ Gemini AI: 無効")
             st.caption("固定クイズで動作")
         
-        st.success("✅ 軽量アバター生成: 有効")
-        st.caption("外部API不要で動作")
+        st.success("✅ 高度アニメアバター: 有効")
+        st.caption("本人らしさ + 誇張表現")
     
     st.markdown("---")
     
@@ -714,7 +861,7 @@ if st.session_state.game_state == 'menu':
             st.session_state.quiz_phase = 'none'
             st.rerun()
 
-# プレイヤー入力画面（顔写真・AIアバター対応）
+# プレイヤー入力画面（高度なアニメアバター対応）
 elif st.session_state.game_state == 'input_players':
     st.markdown("---")
     st.subheader("👥 参加者情報の入力")
@@ -742,31 +889,35 @@ elif st.session_state.game_state == 'input_players':
             with col4:
                 cup_type = st.selectbox("基準量", ['おちょこ', 'ジョッキ', 'どちらも'], key=f"cup_{i}")
             
-            # 顔写真・アバター設定
-            st.markdown("**📸 顔写真・AIアバター設定（任意）**")
+            # 顔写真・高度なアニメアバター設定
+            st.markdown("**🎨 顔写真・高度なアニメアバター設定（任意）**")
             
             col_photo1, col_photo2 = st.columns(2)
             
             avatar_base64 = None
+            original_base64 = None
             
             with col_photo1:
                 uploaded_file = st.file_uploader(
                     "写真を選択", 
                     type=['jpg', 'jpeg', 'png'], 
                     key=f"upload_{i}",
-                    help="正方形に近い写真がおすすめ"
+                    help="正方形に近い写真がおすすめです"
                 )
                 
                 if uploaded_file:
                     st.image(uploaded_file, width=80, caption="アップロード写真")
+                    original_base64 = image_to_base64(uploaded_file)
             
             with col_photo2:
                 captured_photo = st.camera_input(f"📸 {name}の写真を撮る", key=f"camera_{i}")
                 
                 if captured_photo:
                     st.image(captured_photo, width=80, caption="撮影写真")
+                    if not original_base64:  # アップロードがない場合のみ
+                        original_base64 = image_to_base64(captured_photo)
             
-            # アバター生成
+            # 高度なアニメアバター生成
             source_image = uploaded_file if uploaded_file else captured_photo
             
             if source_image:
@@ -774,27 +925,55 @@ elif st.session_state.game_state == 'input_players':
                 
                 with col_style:
                     avatar_style = st.selectbox(
-                        "アバタースタイル",
-                        ["cartoon", "pixel", "mono"],
-                        format_func=lambda x: {"cartoon": "🎨 カートゥーン", "pixel": "🕹️ ピクセル", "mono": "⚫ モノクローム"}[x],
-                        key=f"style_{i}"
+                        "アニメアバタースタイル",
+                        ["anime_pro", "anime_vibrant", "anime_soft"],
+                        format_func=lambda x: {
+                            "anime_pro": "🌟 アニメプロ版（推奨）",
+                            "anime_vibrant": "✨ 超鮮やかアニメ版",
+                            "anime_soft": "🌸 ソフトアニメ版"
+                        }[x],
+                        key=f"style_{i}",
+                        index=0  # デフォルトをアニメプロ版に
                     )
                 
                 with col_generate:
-                    if st.button(f"🤖 アバター生成", key=f"generate_{i}", use_container_width=True):
-                        with st.spinner("アバター生成中..."):
-                            avatar_base64 = generate_lightweight_avatar(source_image, avatar_style)
+                    if st.button(f"🎨 高度アニメアバター生成", key=f"generate_{i}", use_container_width=True):
+                        with st.spinner("高度なアニメアバター生成中..."):
+                            avatar_base64 = generate_enhanced_anime_avatar(source_image, avatar_style)
                         
                         if avatar_base64:
-                            st.success("アバター生成完了！")
+                            st.success("高度アニメアバター生成完了！")
                         else:
                             st.error("アバター生成に失敗しました")
                 
-                # 生成されたアバターの表示
-                if avatar_base64:
-                    st.markdown('<div class="avatar-preview">', unsafe_allow_html=True)
-                    st.image(base64.b64decode(avatar_base64), width=60, caption="生成アバター")
+                # 生成されたアバターと元画像の比較表示
+                if avatar_base64 and original_base64:
+                    st.markdown("### 🔄 アニメ変換結果")
+                    st.markdown('<div class="avatar-comparison">', unsafe_allow_html=True)
+                    
+                    col_orig, col_arrow, col_avatar = st.columns([2, 1, 2])
+                    with col_orig:
+                        st.markdown('<div class="avatar-item">', unsafe_allow_html=True)
+                        st.image(base64.b64decode(original_base64), width=90, caption="元画像")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    with col_arrow:
+                        st.markdown("### ➡️")
+                    
+                    with col_avatar:
+                        st.markdown('<div class="avatar-item">', unsafe_allow_html=True)
+                        st.image(base64.b64decode(avatar_base64), width=90, caption="アニメアバター")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    
                     st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # 詳細説明
+                    style_descriptions = {
+                        "anime_pro": "本人の特徴を保持しつつ、セル画風の色数制限と強い輪郭線でアニメらしく誇張",
+                        "anime_vibrant": "極端に鮮やかな色彩で派手で目立つインパクト重視のスタイル",
+                        "anime_soft": "優しいパステル調でソフトで上品な仕上がり"
+                    }
+                    st.info(f"✨ {style_descriptions.get(avatar_style, '')}")
             
             players_temp.append({
                 'name': name,
@@ -803,7 +982,8 @@ elif st.session_state.game_state == 'input_players':
                 'cup_type': cup_type,
                 'total_drunk': 0,
                 'drunk_degree': 0,
-                'avatar_base64': avatar_base64
+                'avatar_base64': avatar_base64,
+                'original_base64': original_base64
             })
     
     st.markdown("---")
@@ -1043,7 +1223,7 @@ elif st.session_state.game_state == 'playing':
                     st.error(f"⚡ **{st.session_state.sudden_event_player}**さん、アウト！")
                     st.warning(f"🍷 飲む量: **{st.session_state.sudden_event_drink}**")
         
-        # アバター対応ステータス表示
+        # 高度なアニメアバター対応ステータス表示
         if not st.session_state.spinning and st.session_state.quiz_phase == 'none':
             display_status()
     
@@ -1051,7 +1231,7 @@ elif st.session_state.game_state == 'playing':
         st.session_state.game_state = 'finished'
         st.rerun()
 
-# ゲーム終了画面（アバター対応）
+# ゲーム終了画面（高度なアニメアバター対応）
 elif st.session_state.game_state == 'finished':
     st.markdown("---")
     st.markdown("# 🎉 ゲーム終了！最終ランキング")
@@ -1070,7 +1250,7 @@ elif st.session_state.game_state == 'finished':
             
             with col2:
                 if p.get('avatar_base64'):
-                    st.image(base64.b64decode(p['avatar_base64']), width=50)
+                    st.image(base64.b64decode(p['avatar_base64']), width=60)
             
             with col3:
                 st.markdown(f"**{p['name']}**")
