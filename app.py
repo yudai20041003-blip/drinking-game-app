@@ -218,6 +218,7 @@ def image_to_base64(image_file, max_size=(96, 96)):
         st.error(f"画像処理エラー: {e}")
         return None
 
+def process_photo_for_roulette(image_file):
     """写真をそのままルーレット用に変換（円形クロップのみ）"""
     return image_to_base64(image_file, max_size=(96, 96))
 
