@@ -15,7 +15,7 @@ except ImportError:
 # ページ設定
 st.set_page_config(page_title="🍶 AIルーレット飲みゲーム", page_icon="🍶", layout="wide")
 
-# スマホ対応の高度なCSS実装（フェーズ1）
+# スマホ対応の高度なCSS実装
 st.markdown("""
 <style>
     /* モバイル最適化のメインCSS */
@@ -64,20 +64,48 @@ st.markdown("""
     }
     
     .quiz-question {
-        font-size: 18px;
+        font-size: 20px;
         font-weight: bold;
-        margin-bottom: 10px;
+        margin-bottom: 15px;
+        text-align: center;
     }
     
     .quiz-hint {
         font-style: italic;
         opacity: 0.9;
         margin-bottom: 15px;
+        text-align: center;
+    }
+    
+    .participant-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 15px 0;
+    }
+    
+    .participant-card {
+        background: rgba(255,255,255,0.1);
+        padding: 10px 15px;
+        border-radius: 8px;
+        border: 2px solid rgba(255,255,255,0.3);
+        color: white;
+        font-weight: bold;
+    }
+    
+    .eliminated-card {
+        background: rgba(0,255,0,0.2);
+        border-color: rgba(0,255,0,0.6);
+    }
+    
+    .penalty-card {
+        background: rgba(255,0,0,0.2);
+        border-color: rgba(255,0,0,0.6);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Gemini API設定（フェーズ2）
+# Gemini API設定
 GEMINI_API_KEY = None
 if AI_AVAILABLE:
     GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY")
@@ -96,21 +124,22 @@ def init_session_state():
         'saved_players': [],
         'round_count': 0,
         'max_rounds': 15,
-        'had_sudden_event': False,  # 元コードの突発イベント
+        'had_sudden_event': False,
         'spinning': False,
         'selected_player_index': None,
         'last_selected': None,
         'last_drink': None,
-        'sudden_event_player': None,  # 元コードの突発イベント
-        'sudden_event_drink': None,   # 元コードの突発イベント
-        # フェーズ2: クイズシステム関連
+        'sudden_event_player': None,
+        'sudden_event_drink': None,
+        # 口頭回答クイズシステム
         'quiz_phase': 'none',  # 'none', 'active', 'result'
-        'current_quiz': None,
-        'quiz_answers': {},
-        'quiz_start_time': None,
-        'quiz_time_limit': 30,
+        'quiz_list': [],  # 全クイズリスト
+        'current_quiz_index': 0,  # 現在のクイズ番号
+        'quiz_participants': [],  # 参加者リスト
+        'quiz_eliminated': [],  # 正解して脱落した人
+        'quiz_excluded': None,  # 不参加者（飲んだ人）
         # 連続当たり救済システム
-        'last_picked_rounds': {}  # プレイヤー名: 最終選択ラウンド
+        'last_picked_rounds': {}
     }
     
     for key, default_value in defaults.items():
@@ -156,16 +185,13 @@ def update_drunk_degree(player, multiplier):
 
 def calculate_player_weight(player):
     """公平性を考慮した重み計算（連続当たり救済付き）"""
-    # 酔い度が低いほど重くなる公平ウェイト
     base = 0.4 + (1.0 - player["drunk_degree"]/100.0) * 1.2
-    # 個人特性による微調整
     adj = 1.0 + (5 - player["strength"]) * 0.05 + (player["preference"] - 3) * 0.05
     weight = max(0.1, base * adj)
     
     # 連続当たり救済システム
     player_name = player['name']
     last_picked = st.session_state.last_picked_rounds.get(player_name, -999)
-    # 直近2ラウンドで選ばれていたら重みを半減
     recent_penalty = 0.5 if st.session_state.round_count - last_picked <= 2 else 1.0
     
     return weight * recent_penalty
@@ -177,8 +203,8 @@ def smart_player_selection(players):
     selected_index = players.index(selected_player)
     return selected_index
 
-def generate_ai_quiz():
-    """AIでクイズを生成（フォールバック付き）"""
+def generate_ai_quiz_batch(num_quizzes):
+    """指定された数のクイズを一度に生成"""
     if not GEMINI_API_KEY or not AI_AVAILABLE:
         fallback_quizzes = [
             {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
@@ -188,25 +214,37 @@ def generate_ai_quiz():
             {"question": "水の化学式は？", "answer": "H2O", "hint": "水素と酸素"},
             {"question": "一週間は何日？", "answer": "7日", "hint": "月曜から日曜まで"},
             {"question": "日本の国鳥は？", "answer": "キジ", "hint": "桃太郎の仲間"},
-            {"question": "オリンピックは何年に一度？", "answer": "4年", "hint": "夏と冬がある"}
+            {"question": "オリンピックは何年に一度？", "answer": "4年", "hint": "夏と冬がある"},
+            {"question": "虹は何色？", "answer": "7色", "hint": "赤橙黄緑青藍紫"},
+            {"question": "干支は全部で何種類？", "answer": "12種類", "hint": "ねずみから始まる"}
         ]
-        return random.choice(fallback_quizzes)
+        
+        # 必要な数だけランダムに選択
+        return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
     try:
-        prompt = """
-        飲み会で盛り上がる簡単なクイズを1問作ってください。
-        以下のJSON形式で回答してください：
-        {
-            "question": "問題文（簡潔に）",
-            "answer": "正解（短く）",
-            "hint": "ヒント（一言で）"
-        }
+        prompt = f"""
+        飲み会で盛り上がる簡単なクイズを{num_quizzes}問作ってください。
+        以下のJSON配列形式で回答してください：
+        [
+            {{
+                "question": "問題文1",
+                "answer": "正解1", 
+                "hint": "ヒント1"
+            }},
+            {{
+                "question": "問題文2",
+                "answer": "正解2",
+                "hint": "ヒント2"
+            }}
+        ]
         
         条件：
         - 一般常識レベル
         - 答えは1-5文字程度
         - 楽しい雰囲気になるもの
         - 日本語で出題
+        - バラエティに富んだジャンル
         """
         
         model = genai.GenerativeModel('gemini-pro')
@@ -219,31 +257,47 @@ def generate_ai_quiz():
         elif "```" in text:
             text = text.split("```")[1]
         
-        quiz_data = json.loads(text)
+        quiz_list = json.loads(text)
         
-        # 基本バリデーション
-        if not all(k in quiz_data for k in ("question", "answer")):
-            raise ValueError("必要なキーが不足")
-        if "hint" not in quiz_data:
-            quiz_data["hint"] = "がんばって！"
+        # バリデーション
+        valid_quizzes = []
+        for quiz in quiz_list:
+            if isinstance(quiz, dict) and all(k in quiz for k in ("question", "answer")):
+                if "hint" not in quiz:
+                    quiz["hint"] = "がんばって！"
+                valid_quizzes.append(quiz)
+        
+        if len(valid_quizzes) >= num_quizzes:
+            return valid_quizzes[:num_quizzes]
+        else:
+            # 不足分をフォールバックで補完
+            fallback_quizzes = [
+                {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
+                {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
+                {"question": "日本の首都は？", "answer": "東京", "hint": "関東地方にある"}
+            ]
+            while len(valid_quizzes) < num_quizzes:
+                valid_quizzes.append(random.choice(fallback_quizzes))
+            return valid_quizzes[:num_quizzes]
             
-        return quiz_data
-        
     except Exception as e:
         st.info(f"AIクイズ生成に失敗: フォールバックを使用")
-        return {"question": "今日の運勢は？", "answer": "大吉", "hint": "ポジティブに！"}
+        fallback_quizzes = [
+            {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
+            {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
+            {"question": "日本の首都は？", "answer": "東京", "hint": "関東地方にある"}
+        ]
+        return random.choices(fallback_quizzes, k=num_quizzes)
 
 def create_roulette_html(players, selected_index=None, spinning=False):
-    """スマホ完全対応の美しいルーレット（元コードベース + レスポンシブ対応）"""
+    """スマホ完全対応の美しいルーレット"""
     num_players = len(players)
     colors = ['#FF6666', '#4ECDCA', '#4587D1', '#FFA07A', '#98D8C8',
               '#F7DC6F', '#88BFCE', '#B5C1E2', '#B8B195', '#C8C6B4',
               '#6C5E7B', '#355C70']
     
-    # 各セクションの角度
     angle_per_section = 360 / num_players
     
-    # conic-gradientでセクションを作成
     gradient_stops = []
     for i in range(num_players):
         start_angle = i * angle_per_section
@@ -253,34 +307,26 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     
     gradient = ", ".join(gradient_stops)
     
-    # 回転角度の計算
     if selected_index is not None:
-        # 選択されたプレイヤーが上（12時方向）に来るように
         target_angle = -(selected_index * angle_per_section + angle_per_section / 2)
         if spinning:
-            # スピン時は3-5回転を追加
-            total_rotation = target_angle + random.randint(1080, 1800)  # 3-5回転
+            total_rotation = target_angle + random.randint(1080, 1800)
         else:
             total_rotation = target_angle
     else:
         total_rotation = 0
     
-    # プレイヤー名のラベル生成（CSS変数を使用した洗練されたアプローチ）
     labels_html = ""
     for i, player in enumerate(players):
-        # セクション中央の角度を計算
         label_angle = i * angle_per_section + angle_per_section / 2
-        # 名前をHTMLエスケープ
         name = str(player['name']).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
-        # CSS変数を使用してエレガントに配置
         labels_html += f"""
         <div class="player-label" style="--angle: {label_angle}deg;">
             <span>{name}</span>
         </div>
         """
     
-    # スマホ対応の完全なHTML文書
     html_content = f"""
 <!DOCTYPE html>
 <html>
@@ -320,7 +366,6 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             filter: drop-shadow(0 6px 12px rgba(0,0,0,0.4));
             z-index: 30;
         }}
-        /* 回転するルーレット本体 */
         #wheel {{
             position: relative;
             width: 100%;
@@ -334,12 +379,10 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             transition: transform 0.1s ease;
             z-index: 5;
         }}
-        /* プレイヤー名ラベル（ルーレットの子要素として回転） */
         .player-label {{
             position: absolute;
             top: 50%;
             left: 50%;
-            /* CSS変数を使用した洗練された配置 */
             transform: rotate(var(--angle)) translateY(calc(-1 * (min(90vw, 90vh, 480px) * 0.40))) rotate(calc(-1 * var(--angle)));
             transform-origin: center center;
             pointer-events: none;
@@ -397,12 +440,9 @@ def create_roulette_html(players, selected_index=None, spinning=False):
 <body>
     <div class="roulette-container">
         <div class="arrow"></div>
-        
-        <!-- 重要：ラベルをルーレット内部に配置 -->
         <div id="wheel">
             {labels_html}
         </div>
-        
         <div class="center-circle">🍶</div>
     </div>
     
@@ -413,11 +453,9 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             const targetRotation = {total_rotation};
             
             if (spinning) {{
-                // スピン開始時の設定
                 wheel.style.transition = 'none';
                 wheel.style.transform = 'rotate(0deg)';
                 
-                // スムーズなアニメーション開始
                 requestAnimationFrame(() => {{
                     requestAnimationFrame(() => {{
                         wheel.style.transition = 'transform 3s cubic-bezier(0.25, 0.1, 0.25, 1)';
@@ -425,7 +463,6 @@ def create_roulette_html(players, selected_index=None, spinning=False):
                     }});
                 }});
             }} else {{
-                // 静止状態
                 wheel.style.transition = 'transform 0.5s ease-out';
                 wheel.style.transform = `rotate(${{targetRotation}}deg)`;
             }}
@@ -454,7 +491,7 @@ def display_status():
 
 # メインアプリケーション
 st.title("🍶 AIルーレット飲みゲーム")
-st.caption("スマホ対応・AIクイズ機能付き！")
+st.caption("スマホ対応・口頭クイズ機能付き！")
 
 # メニュー画面
 if st.session_state.game_state == 'menu':
@@ -469,8 +506,9 @@ if st.session_state.game_state == 'menu':
         
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
-        - **🧠 AIクイズシステム**: テンポ調整とペナルティ機能
+        - **🗣️ 口頭クイズシステム**: 人数-2問で早抜けゲーム
         - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
+        - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
         - 15ラウンドのルーレット
         - 突発イベントもあり！
@@ -483,8 +521,8 @@ if st.session_state.game_state == 'menu':
             
             1. **ゲームマスター**が一人、このアプリを操作
             2. **Zoom/Meet/Discord**などで画面を共有
-            3. 参加者は共有画面を見ながら**音声/チャット**で参加
-            4. クイズの回答はマスターが代理入力してもOK
+            3. 参加者は共有画面を見ながら**音声**で参加
+            4. クイズは口頭で答える → マスターが正解ボタンを押す
             
             **メリット:**
             - 設定が簡単で安定動作
@@ -578,101 +616,120 @@ elif st.session_state.game_state == 'input_players':
 
 # ゲーム中
 elif st.session_state.game_state == 'playing':
-    st.markdown(f"### 🎲 ラウンド {st.session_state.round_count + 1}/{st.session_state.max_rounds}")
+    # 途中終了ボタン（常に表示）
+    col_title, col_end = st.columns([4, 1])
+    with col_title:
+        st.markdown(f"### 🎲 ラウンド {st.session_state.round_count + 1}/{st.session_state.max_rounds}")
+    with col_end:
+        if st.button("⏹️ ゲーム終了", use_container_width=True, type="secondary"):
+            st.session_state.game_state = 'finished'
+            st.rerun()
     
     if st.session_state.round_count < st.session_state.max_rounds:
-        # フェーズ2: クイズフェーズの処理
+        # 口頭クイズフェーズの処理
         if st.session_state.quiz_phase == 'active':
             st.markdown("---")
             st.markdown('<div class="quiz-container">', unsafe_allow_html=True)
-            st.markdown("## 🧠 クイズタイム！")
+            st.markdown("## 🗣️ 口頭クイズタイム！")
             
-            quiz = st.session_state.current_quiz
-            st.markdown(f'<div class="quiz-question">問題: {quiz["question"]}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="quiz-hint">💡 ヒント: {quiz.get("hint", "がんばって！")}</div>', unsafe_allow_html=True)
+            # 現在のクイズ表示
+            current_quiz = st.session_state.quiz_list[st.session_state.current_quiz_index]
+            st.markdown(f'<div class="quiz-question">第{st.session_state.current_quiz_index + 1}問: {current_quiz["question"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="quiz-hint">💡 ヒント: {current_quiz.get("hint", "がんばって！")}</div>', unsafe_allow_html=True)
+            
+            # 正解表示（マスター用）
+            with st.expander("👀 正解を確認（マスター用）", expanded=False):
+                st.success(f"正解: **{current_quiz['answer']}**")
+            
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # 各プレイヤーの回答入力
-            st.markdown("### 📝 回答入力")
-            cols = st.columns(min(3, len(st.session_state.players)))
+            # 参加者状況表示
+            remaining = [p for p in st.session_state.quiz_participants if p not in st.session_state.quiz_eliminated]
             
-            for i, player in enumerate(st.session_state.players):
-                with cols[i % len(cols)]:
-                    if player['name'] not in st.session_state.quiz_answers:
-                        answer = st.text_input(f"{player['name']}", key=f"quiz_{player['name']}", placeholder="回答を入力")
-                        if st.button(f"✅ 確定", key=f"submit_{player['name']}", use_container_width=True):
-                            if answer.strip():
-                                st.session_state.quiz_answers[player['name']] = {
-                                    'answer': answer.strip(),
-                                    'time': time.time() - st.session_state.quiz_start_time
-                                }
-                                st.success(f"{player['name']} 回答完了！")
-                                st.rerun()
-                    else:
-                        st.text_input(f"{player['name']}", 
-                                    value=st.session_state.quiz_answers[player['name']]['answer'], 
-                                    disabled=True, key=f"disabled_{player['name']}")
-                        st.caption(f"⏱️ {st.session_state.quiz_answers[player['name']]['time']:.1f}秒")
+            st.markdown("### 👥 参加者状況")
+            st.markdown(f"**🏃 参加中**: {', '.join(remaining)} ({len(remaining)}人)")
+            if st.session_state.quiz_eliminated:
+                st.markdown(f"**✅ 正解済み**: {', '.join(st.session_state.quiz_eliminated)} ({len(st.session_state.quiz_eliminated)}人)")
+            if st.session_state.quiz_excluded:
+                st.markdown(f"**🍷 不参加**: {st.session_state.quiz_excluded} (直前に飲んだため)")
             
-            # 進行状況
-            answered_count = len(st.session_state.quiz_answers)
-            total_count = len(st.session_state.players)
-            st.progress(answered_count / total_count)
-            st.caption(f"回答済み: {answered_count}/{total_count}人")
-            
-            # 結果表示ボタン
-            elapsed_time = time.time() - st.session_state.quiz_start_time
-            if answered_count == total_count or elapsed_time > st.session_state.quiz_time_limit:
+            if len(remaining) > 2:
+                # 正解者選択
+                selected_correct_player = st.selectbox(
+                    "🎯 正解した人は誰ですか？",
+                    ['選択してください'] + remaining,
+                    key="correct_player_select"
+                )
+                
+                col_quiz_btn1, col_quiz_btn2 = st.columns(2)
+                with col_quiz_btn1:
+                    if st.button("✅ 正解！", use_container_width=True, type="primary", 
+                                disabled=(selected_correct_player == '選択してください')):
+                        st.session_state.quiz_eliminated.append(selected_correct_player)
+                        st.success(f"🎉 {selected_correct_player}さん正解！クイズから脱落")
+                        
+                        # 次のクイズへ
+                        if st.session_state.current_quiz_index < len(st.session_state.quiz_list) - 1:
+                            st.session_state.current_quiz_index += 1
+                        else:
+                            st.session_state.quiz_phase = 'result'
+                        st.rerun()
+                
+                with col_quiz_btn2:
+                    if st.button("⏭️ このクイズをスキップ", use_container_width=True):
+                        if st.session_state.current_quiz_index < len(st.session_state.quiz_list) - 1:
+                            st.session_state.current_quiz_index += 1
+                        else:
+                            st.session_state.quiz_phase = 'result'
+                        st.rerun()
+                        
+            else:
+                # 残り2人以下 → 結果へ
+                st.info("残りが2人以下になりました。クイズ終了です。")
                 if st.button("📊 結果発表！", use_container_width=True, type="primary"):
                     st.session_state.quiz_phase = 'result'
                     st.rerun()
-            else:
-                st.info(f"⏰ 残り時間: {max(0, st.session_state.quiz_time_limit - elapsed_time):.0f}秒")
-
+                
         elif st.session_state.quiz_phase == 'result':
             st.markdown("---")
             st.markdown("## 🎉 クイズ結果発表")
             
-            quiz = st.session_state.current_quiz
-            st.markdown(f"**問題:** {quiz['question']}")
-            st.success(f"**正解:** {quiz['answer']}")
+            # 結果表示
+            remaining = [p for p in st.session_state.quiz_participants if p not in st.session_state.quiz_eliminated]
             
-            # 回答結果をソート（時間順）
-            if st.session_state.quiz_answers:
-                # 未回答者を追加
-                all_answers = dict(st.session_state.quiz_answers)
-                for p in st.session_state.players:
-                    if p['name'] not in all_answers:
-                        all_answers[p['name']] = {'answer': '未回答', 'time': 999.0}
-                
-                sorted_answers = sorted(all_answers.items(), key=lambda x: x[1]['time'])
-                
-                st.markdown("### 📋 回答一覧（早い順）")
-                for i, (name, data) in enumerate(sorted_answers):
-                    is_correct = isinstance(data['answer'], str) and quiz['answer'].lower() in data['answer'].lower()
-                    status = "✅ 正解" if is_correct else ("⏱️ 未回答" if data['answer'] == '未回答' else "❌ 不正解")
-                    rank = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}位"
-                    time_display = "—" if data['time'] >= 999 else f"{data['time']:.1f}秒"
-                    st.write(f"{rank} **{name}**: {data['answer']} {status}（{time_display}）")
-                
-                # 最遅の人にペナルティ
-                slowest_name = sorted_answers[-1][0]
-                st.warning(f"🐌 最も遅かった（または未回答の）**{slowest_name}** さんにペナルティ！")
+            if st.session_state.quiz_eliminated:
+                st.success("🎊 正解者（クイズから脱落）")
+                st.markdown('<div class="participant-status">', unsafe_allow_html=True)
+                for name in st.session_state.quiz_eliminated:
+                    st.markdown(f'<div class="participant-card eliminated-card">✅ {name}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            if remaining:
+                st.warning("🐌 最後まで残った人（ペナルティ対象）")
+                st.markdown('<div class="participant-status">', unsafe_allow_html=True)
+                for name in remaining:
+                    st.markdown(f'<div class="participant-card penalty-card">💥 {name}</div>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 
                 # ペナルティ適用
                 for player in st.session_state.players:
-                    if player['name'] == slowest_name:
+                    if player['name'] in remaining:
                         penalty_multiplier = 0.5
                         multiplier = calculate_drink_amount(player, penalty_multiplier)
                         drink_display = get_drink_display(multiplier, player['cup_type'])
                         update_drunk_degree(player, multiplier)
-                        st.info(f"🍶 ペナルティ: {drink_display}")
-                        break
+                        st.info(f"🍶 {player['name']}のペナルティ: {drink_display}")
+            
+            if st.session_state.quiz_excluded:
+                st.info(f"🍷 不参加: {st.session_state.quiz_excluded}（直前に飲んだため）")
             
             if st.button("🎲 ゲーム再開（次のラウンドへ）", use_container_width=True, type="primary"):
                 st.session_state.quiz_phase = 'none'
-                st.session_state.current_quiz = None
-                st.session_state.quiz_answers = {}
+                st.session_state.quiz_list = []
+                st.session_state.current_quiz_index = 0
+                st.session_state.quiz_participants = []
+                st.session_state.quiz_eliminated = []
+                st.session_state.quiz_excluded = None
                 st.session_state.selected_player_index = None
                 st.session_state.last_selected = None
                 st.session_state.sudden_event_player = None
@@ -683,7 +740,6 @@ elif st.session_state.game_state == 'playing':
         else:
             # ルーレット表示
             if st.session_state.spinning:
-                # 回転アニメーション表示
                 components.html(
                     create_roulette_html(st.session_state.players, 
                                        selected_index=st.session_state.selected_player_index, 
@@ -692,15 +748,13 @@ elif st.session_state.game_state == 'playing':
                     scrolling=False
                 )
                 
-                # アニメーション完了を待つ
                 with st.spinner("🎯 ルーレット回転中..."):
-                    time.sleep(3.2)  # アニメーション時間 + 少し余裕
+                    time.sleep(3.2)
                 
                 st.session_state.spinning = False
                 st.rerun()
                 
             elif st.session_state.selected_player_index is not None:
-                # 結果表示状態
                 components.html(
                     create_roulette_html(st.session_state.players, 
                                        selected_index=st.session_state.selected_player_index), 
@@ -708,7 +762,6 @@ elif st.session_state.game_state == 'playing':
                     scrolling=False
                 )
             else:
-                # 初期状態
                 components.html(create_roulette_html(st.session_state.players), height=520, scrolling=False)
             
             col1, col2, col3 = st.columns([1, 1, 1])
@@ -716,13 +769,11 @@ elif st.session_state.game_state == 'playing':
             with col1:
                 if st.button("🎯 ルーレットを回す", use_container_width=True, type="primary", 
                             disabled=st.session_state.spinning):
-                    # スマート選択実行（連続当たり救済付き）
+                    # スマート選択実行
                     selected_index = smart_player_selection(st.session_state.players)
                     selected_player = st.session_state.players[selected_index]
                     
                     st.session_state.selected_player_index = selected_index
-                    
-                    # 連続当たり記録
                     st.session_state.last_picked_rounds[selected_player['name']] = st.session_state.round_count
                     
                     multiplier = calculate_drink_amount(selected_player)
@@ -733,7 +784,7 @@ elif st.session_state.game_state == 'playing':
                     
                     update_drunk_degree(selected_player, multiplier)
                     
-                    # 元コードの突発イベント判定
+                    # 突発イベント判定
                     if (random.random() < 0.3 or 
                         (st.session_state.round_count == st.session_state.max_rounds - 1 and 
                          not st.session_state.had_sudden_event)):
@@ -758,12 +809,25 @@ elif st.session_state.game_state == 'playing':
             with col2:
                 if st.session_state.selected_player_index is not None and not st.session_state.spinning:
                     # クイズフェーズへ移行するボタン
-                    if st.button("🧠 クイズタイムで一息", use_container_width=True, type="secondary"):
-                        st.session_state.current_quiz = generate_ai_quiz()
-                        st.session_state.quiz_phase = 'active'
-                        st.session_state.quiz_answers = {}
-                        st.session_state.quiz_start_time = time.time()
-                        st.rerun()
+                    if st.button("🗣️ クイズタイムで一息", use_container_width=True, type="secondary"):
+                        # クイズ数を計算（人数-2）
+                        num_participants = len(st.session_state.players) - 1  # 飲んだ人を除く
+                        if num_participants < 3:  # 最低3人必要（最後に2人残すため）
+                            st.warning("クイズに参加できる人が少なすぎます。（飲んだ人を除いて3人以上必要）")
+                        else:
+                            num_quizzes = num_participants - 2  # 最後の2人になるまで
+                            st.session_state.quiz_list = generate_ai_quiz_batch(num_quizzes)
+                            st.session_state.current_quiz_index = 0
+                            
+                            # 参加者設定（飲んだ人を除く）
+                            excluded_player = st.session_state.last_selected
+                            participants = [p['name'] for p in st.session_state.players if p['name'] != excluded_player]
+                            
+                            st.session_state.quiz_participants = participants
+                            st.session_state.quiz_eliminated = []
+                            st.session_state.quiz_excluded = excluded_player
+                            st.session_state.quiz_phase = 'active'
+                            st.rerun()
             
             with col3:
                 if st.session_state.selected_player_index is not None and not st.session_state.spinning:
