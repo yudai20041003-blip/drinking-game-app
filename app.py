@@ -183,56 +183,9 @@ def init_session_state():
 
 init_session_state()
 
-# 高度なアニメ風画像処理関数群
-def enhance_anime_colors(img, intensity=1.5):
-    """アニメ風の鮮やかな色彩に強化"""
-    # 彩度を大幅に上げる
-    enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(intensity)
-    
-    # コントラストを調整
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.3)
-    
-    # 明度を少し上げて明るく
-    enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(1.1)
-    
-    return img
-
-def create_anime_edges(img, threshold=30):
-    """アニメ風の強い輪郭線を作成"""
-    # グレースケールに変換してエッジ検出
-    gray = img.convert('L')
-    edges = gray.filter(ImageFilter.FIND_EDGES)
-    
-    # エッジを二値化して強調
-    edges = edges.point(lambda p: 255 if p > threshold else 0)
-    
-    # エッジを少し太くする
-    edges = edges.filter(ImageFilter.MaxFilter(size=3))
-    
-    return edges
-
-def apply_posterization(img, levels=6):
-    """ポスタリゼーション（色数制限）でセル画風に"""
-    # 各チャンネルのビット数を制限
-    bits = max(1, min(8, levels))
-    return ImageOps.posterize(img, bits)
-
-def smooth_anime_texture(img):
-    """アニメらしい滑らかな質感を作成"""
-    # 複数回のスムージングで滑らかに
-    img = img.filter(ImageFilter.SMOOTH)
-    img = img.filter(ImageFilter.SMOOTH_MORE)
-    
-    # ガウシアンブラーで更に滑らかに
-    img = img.filter(ImageFilter.GaussianBlur(radius=0.8))
-    
-    return img
-
+# 画像処理関数
 def image_to_base64(image_file, max_size=(96, 96)):
-    """画像をBase64エンコードして保存用に変換"""
+    """画像をBase64エンコードして保存用に変換（円形クロップ付き）"""
     try:
         img = Image.open(image_file)
         img = img.convert('RGB')
@@ -249,197 +202,24 @@ def image_to_base64(image_file, max_size=(96, 96)):
         # リサイズ
         img = img.resize(max_size, Image.Resampling.LANCZOS)
         
+        # 円形マスクを適用
+        mask = Image.new('L', max_size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, max_size[0], max_size[1]), fill=255)
+        
+        result = Image.new('RGBA', max_size, (0, 0, 0, 0))
+        img_rgba = img.convert('RGBA')
+        result.paste(img_rgba, (0, 0), mask)
+        
         buffered = BytesIO()
-        img.save(buffered, format="PNG")
+        result.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode()
     except Exception as e:
         st.error(f"画像処理エラー: {e}")
         return None
 
-def create_circle_mask(img, size=(96, 96)):
-    """円形マスクを適用"""
-    img = img.resize(size, Image.Resampling.LANCZOS)
-    mask = Image.new('L', size, 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse((0, 0, size[0], size[1]), fill=255)
-    
-    result = Image.new('RGBA', size, (0, 0, 0, 0))
-    img_rgba = img.convert('RGBA')
-    result.paste(img_rgba, (0, 0), mask)
-    return result
-
-def apply_ghibli_color_tone(img):
-    """ジブリ風の温かく柔らかい色調を適用"""
-    # 色相を少し暖色寄りに
-    img_array = np.array(img, dtype=np.float32)
-    
-    # 赤みを少し増やして温かみを
-    img_array[:, :, 0] = np.clip(img_array[:, :, 0] * 1.08, 0, 255)
-    
-    # 青みを少し抑える
-    img_array[:, :, 2] = np.clip(img_array[:, :, 2] * 0.95, 0, 255)
-    
-    # 全体的に少し明るく
-    img_array = np.clip(img_array * 1.05, 0, 255)
-    
-    return Image.fromarray(img_array.astype(np.uint8))
-
-def create_watercolor_effect(img):
-    """水彩画風の効果を作成"""
-    # 複数回のバイラテラルフィルタで水彩画風に
-    img_array = np.array(img)
-    
-    # エッジを保持しながらスムージング
-    for _ in range(2):
-        img = img.filter(ImageFilter.SMOOTH_MORE)
-    
-    # 少し色を淡くする
-    enhancer = ImageEnhance.Color(img)
-    img = enhancer.enhance(0.9)
-    
-    return img
-
-def generate_enhanced_anime_avatar(image_file, style="anime_pro"):
-    """高度なアニメ風アバター生成（本人らしさ保持+誇張表現）"""
-    try:
-        img = Image.open(image_file)
-        img = img.convert('RGB')
-        
-        # 正方形にクロップ
-        width, height = img.size
-        min_size = min(width, height)
-        left = (width - min_size) / 2
-        top = (height - min_size) / 2
-        right = (width + min_size) / 2
-        bottom = (height + min_size) / 2
-        img = img.crop((left, top, right, bottom))
-        
-        # 処理用サイズにリサイズ
-        img = img.resize((128, 128), Image.Resampling.LANCZOS)
-        
-        if style == "ghibli":
-            # **ジブリ風処理**
-            
-            # 1. 水彩画風のスムージング
-            img = create_watercolor_effect(img)
-            
-            # 2. ジブリらしい温かい色調
-            img = apply_ghibli_color_tone(img)
-            
-            # 3. 軽いポスタリゼーション（ジブリは色数が多めなので緩め）
-            img = apply_posterization(img, levels=6)
-            
-            # 4. 優しいエッジ（ジブリは輪郭線が柔らかい）
-            edges = create_anime_edges(img, threshold=50)
-            edges_inverted = ImageOps.invert(edges)
-            
-            # エッジを薄めに適用
-            img_array = np.array(img)
-            edges_array = np.array(edges_inverted) / 255.0
-            
-            for i in range(3):
-                img_array[:, :, i] = img_array[:, :, i] * (0.7 + 0.3 * edges_array)
-            
-            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
-            
-            # 5. 柔らかさを追加
-            img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
-            
-            # 6. 全体的に明度とコントラストを調整
-            enhancer = ImageEnhance.Brightness(img)
-            img = enhancer.enhance(1.1)
-            
-            enhancer = ImageEnhance.Contrast(img)
-            img = enhancer.enhance(1.15)
-            
-        elif style == "anime_pro":
-            # **プロ級アニメ風処理**
-            
-            # 1. 最初に軽くスムージングで細かいノイズを除去
-            img = smooth_anime_texture(img)
-            
-            # 2. 色彩を鮮やかに強化（アニメらしい色合い）
-            img = enhance_anime_colors(img, intensity=1.6)
-            
-            # 3. ポスタリゼーションでセル画風の色数制限
-            img = apply_posterization(img, levels=5)
-            
-            # 4. エッジ検出と強調
-            edges = create_anime_edges(img, threshold=25)
-            
-            # 5. エッジを元画像に合成
-            # エッジを反転させて黒い線にする
-            edges_inverted = ImageOps.invert(edges)
-            
-            # エッジ部分を暗くする効果
-            img_array = np.array(img)
-            edges_array = np.array(edges_inverted) / 255.0
-            
-            # エッジ部分を暗くしてアニメの輪郭線効果
-            for i in range(3):  # RGB各チャンネル
-                img_array[:, :, i] = img_array[:, :, i] * (0.3 + 0.7 * edges_array)
-            
-            img = Image.fromarray(np.clip(img_array, 0, 255).astype(np.uint8))
-            
-            # 6. 最終的な色調整
-            enhancer = ImageEnhance.Sharpness(img)
-            img = enhancer.enhance(1.2)
-            
-        elif style == "anime_vibrant":
-            # **超鮮やかアニメ風**
-            
-            # 極端に鮮やかな色彩
-            img = enhance_anime_colors(img, intensity=2.0)
-            
-            # 強いポスタリゼーション
-            img = apply_posterization(img, levels=4)
-            
-            # 明度を上げて明るく
-            enhancer = ImageEnhance.Brightness(img)
-            img = enhancer.enhance(1.2)
-            
-            # エッジ強調
-            edges = create_anime_edges(img, threshold=20)
-            img = Image.blend(img, ImageOps.colorize(edges, black="#000000", white="#ffffff").convert('RGB'), alpha=0.15)
-            
-        elif style == "anime_soft":
-            # **ソフトアニメ風**
-            
-            # 優しい色調整
-            img = enhance_anime_colors(img, intensity=1.2)
-            
-            # 軽いポスタリゼーション
-            img = apply_posterization(img, levels=7)
-            
-            # 大きくスムージング
-            img = img.filter(ImageFilter.GaussianBlur(radius=1.0))
-            
-            # 軽いエッジ
-            edges = create_anime_edges(img, threshold=40)
-            img = Image.blend(img, ImageOps.colorize(edges, black="#000000", white="#ffffff").convert('RGB'), alpha=0.08)
-            
-        else:
-            # デフォルト（従来のカートゥーン風）
-            quantized = img.quantize(colors=12).convert('RGB')
-            edges = img.filter(ImageFilter.FIND_EDGES)
-            edges = ImageOps.autocontrast(edges.convert('L'))
-            edges = edges.point(lambda p: 0 if p < 50 else 255)
-            edges_rgb = ImageOps.colorize(edges, black="#000000", white="#ffffff")
-            img = Image.blend(quantized, edges_rgb.convert('RGB'), alpha=0.1)
-        
-        # 最終サイズ調整
-        img = img.resize((96, 96), Image.Resampling.LANCZOS)
-        
-        # 円形クロップ
-        circular = create_circle_mask(img)
-        
-        buffered = BytesIO()
-        circular.save(buffered, format="PNG")
-        return base64.b64encode(buffered.getvalue()).decode()
-        
-    except Exception as e:
-        st.error(f"アニメアバター生成エラー: {e}")
-        return None
+    """写真をそのままルーレット用に変換（円形クロップのみ）"""
+    return image_to_base64(image_file, max_size=(96, 96))
 
 # ゲームロジック関数群（変更なし）
 def calculate_drink_amount(player, multiplier_factor=1.0):
@@ -809,7 +589,7 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     return html_content
 
 def display_status():
-    """高度なアニメアバター対応のステータス表示"""
+    """顔写真対応のステータス表示"""
     st.markdown("---")
     st.subheader("📊 現在の酔い度")
     
@@ -828,7 +608,7 @@ def display_status():
 
 # メインアプリケーション
 st.title("🍶 AIルーレット飲みゲーム")
-st.caption("スマホ対応・口頭クイズ＆高度なアニメアバター機能付き！")
+st.caption("スマホ対応・口頭クイズ＆顔写真ルーレット機能付き！")
 
 # メニュー画面
 if st.session_state.game_state == 'menu':
@@ -844,7 +624,7 @@ if st.session_state.game_state == 'menu':
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
         - **🗣️ 口頭クイズシステム**: 最後の1人が飲むサバイバルクイズ
-        - **🎨 ジブリ風アバター生成**: ジブリ映画のキャラクターのような変換
+        - **📸 顔写真ルーレット**: 写真をアップロードしてルーレットに表示
         - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
@@ -852,39 +632,20 @@ if st.session_state.game_state == 'menu':
         - 突発イベントもあり！
         """)
         
-        with st.expander("🎨 高度なアニメアバター機能について", expanded=False):
+        with st.expander("📸 顔写真ルーレット機能について", expanded=False):
             st.markdown("""
-            **新しい高度なアニメ風アバター生成の特徴:**
+            **顔写真をルーレットに表示:**
             
-            **🌿 ジブリ風** (NEW!):
-            - 温かく柔らかい色調
-            - 水彩画のような優しいタッチ
-            - ノスタルジックな雰囲気
-            - 自然な肌の質感
-            - 優しい輪郭線
-            - まるでジブリ映画のキャラクターのような仕上がり
-            
-            **🌟 アニメプロ版**:
-            - 本人の特徴を保持しつつ誇張表現
-            - セル画風の色数制限処理
-            - アニメらしい強い輪郭線
-            - 鮮やかで美しい色彩調整
-            - 滑らかなアニメ質感
-            
-            **✨ 超鮮やかアニメ版**:
-            - 極端に鮮やかな色彩
-            - より派手で目立つスタイル
-            - インパクト重視
-            
-            **🌸 ソフトアニメ版**:
-            - 優しいパステル調
-            - ソフトで上品な仕上がり
-            - 落ち着いた印象
+            - 📤 **写真アップロード**: ファイルから写真を選択
+            - 📷 **カメラ撮影**: その場で写真を撮影
+            - ⭕ **円形クロップ**: 自動で円形に切り抜き
+            - 🎯 **ルーレット表示**: 名前の代わりに顔写真が表示される
             
             **特徴:**
-            - 外部API不要で即座に生成
-            - 本人の特徴を残しつつアニメ風に誇張
+            - シンプル処理で即座に反映
+            - 本人の写真そのままなので分かりやすい
             - プライバシー配慮（セッション内のみ保持）
+            - 写真なしでも名前表示で遊べる
             """)
         
         with st.expander("🌐 リモートプレイの方法", expanded=False):
@@ -895,7 +656,7 @@ if st.session_state.game_state == 'menu':
             2. **Zoom/Meet/Discord**などで画面を共有
             3. 参加者は共有画面を見ながら**音声**で参加
             4. 顔写真は事前に送ってもらうか、リモートで撮影指示
-            5. アニメアバターで本人確認も楽しい
+            5. ルーレットに顔写真が表示されて楽しい
             6. クイズは口頭で答える → マスターが正解ボタンを押す
             """)
     
@@ -908,8 +669,8 @@ if st.session_state.game_state == 'menu':
             st.info("ℹ️ Gemini AI: 無効")
             st.caption("固定クイズで動作")
         
-        st.success("✅ 高度アニメアバター: 有効")
-        st.caption("本人らしさ + 誇張表現")
+        st.success("✅ 顔写真ルーレット: 有効")
+        st.caption("写真そのまま表示")
     
     st.markdown("---")
     
@@ -935,7 +696,7 @@ if st.session_state.game_state == 'menu':
             st.session_state.quiz_phase = 'none'
             st.rerun()
 
-# プレイヤー入力画面（高度なアニメアバター対応）
+# プレイヤー入力画面（顔写真対応）
 elif st.session_state.game_state == 'input_players':
     st.markdown("---")
     st.subheader("👥 参加者情報の入力")
@@ -963,13 +724,12 @@ elif st.session_state.game_state == 'input_players':
             with col4:
                 cup_type = st.selectbox("基準量", ['おちょこ', 'ジョッキ', 'どちらも'], key=f"cup_{i}")
             
-            # 顔写真・高度なアニメアバター設定
-            st.markdown("**🎨 顔写真・高度なアニメアバター設定（任意）**")
+            # 顔写真設定
+            st.markdown("**📸 顔写真設定（任意）**")
             
             col_photo1, col_photo2 = st.columns(2)
             
-            avatar_base64 = None
-            original_base64 = None
+            photo_base64 = None
             
             with col_photo1:
                 uploaded_file = st.file_uploader(
@@ -981,75 +741,20 @@ elif st.session_state.game_state == 'input_players':
                 
                 if uploaded_file:
                     st.image(uploaded_file, width=80, caption="アップロード写真")
-                    original_base64 = image_to_base64(uploaded_file)
+                    photo_base64 = process_photo_for_roulette(uploaded_file)
             
             with col_photo2:
                 captured_photo = st.camera_input(f"📸 {name}の写真を撮る", key=f"camera_{i}")
                 
                 if captured_photo:
                     st.image(captured_photo, width=80, caption="撮影写真")
-                    if not original_base64:  # アップロードがない場合のみ
-                        original_base64 = image_to_base64(captured_photo)
+                    if not photo_base64:  # アップロードがない場合のみ
+                        photo_base64 = process_photo_for_roulette(captured_photo)
             
-            # 高度なアニメアバター生成
-            source_image = uploaded_file if uploaded_file else captured_photo
-            
-            if source_image:
-                col_style, col_generate = st.columns(2)
-                
-                with col_style:
-                    avatar_style = st.selectbox(
-                        "アニメアバタースタイル",
-                        ["ghibli", "anime_pro", "anime_vibrant", "anime_soft"],
-                        format_func=lambda x: {
-                            "ghibli": "🌿 ジブリ風（NEW!）",
-                            "anime_pro": "🌟 アニメプロ版（推奨）",
-                            "anime_vibrant": "✨ 超鮮やかアニメ版",
-                            "anime_soft": "🌸 ソフトアニメ版"
-                        }[x],
-                        key=f"style_{i}",
-                        index=0  # デフォルトをジブリ風に
-                    )
-                
-                with col_generate:
-                    if st.button(f"🎨 高度アニメアバター生成", key=f"generate_{i}", use_container_width=True):
-                        with st.spinner("高度なアニメアバター生成中..."):
-                            avatar_base64 = generate_enhanced_anime_avatar(source_image, avatar_style)
-                        
-                        if avatar_base64:
-                            st.success("高度アニメアバター生成完了！")
-                        else:
-                            st.error("アバター生成に失敗しました")
-                
-                # 生成されたアバターと元画像の比較表示
-                if avatar_base64 and original_base64:
-                    st.markdown("### 🔄 アニメ変換結果")
-                    st.markdown('<div class="avatar-comparison">', unsafe_allow_html=True)
-                    
-                    col_orig, col_arrow, col_avatar = st.columns([2, 1, 2])
-                    with col_orig:
-                        st.markdown('<div class="avatar-item">', unsafe_allow_html=True)
-                        st.image(base64.b64decode(original_base64), width=90, caption="元画像")
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    with col_arrow:
-                        st.markdown("### ➡️")
-                    
-                    with col_avatar:
-                        st.markdown('<div class="avatar-item">', unsafe_allow_html=True)
-                        st.image(base64.b64decode(avatar_base64), width=90, caption="アニメアバター")
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # 詳細説明
-                    style_descriptions = {
-                        "ghibli": "🌿 温かく柔らかい色調と水彩画のような優しいタッチで、まるでジブリ映画のキャラクターのような仕上がり",
-                        "anime_pro": "本人の特徴を保持しつつ、セル画風の色数制限と強い輪郭線でアニメらしく誇張",
-                        "anime_vibrant": "極端に鮮やかな色彩で派手で目立つインパクト重視のスタイル",
-                        "anime_soft": "優しいパステル調でソフトで上品な仕上がり"
-                    }
-                    st.info(f"✨ {style_descriptions.get(avatar_style, '')}")
+            # 写真プレビュー
+            if photo_base64:
+                st.success("✅ 写真がルーレットに反映されます")
+                st.image(base64.b64decode(photo_base64), width=80, caption="ルーレット表示イメージ")
             
             players_temp.append({
                 'name': name,
@@ -1058,8 +763,7 @@ elif st.session_state.game_state == 'input_players':
                 'cup_type': cup_type,
                 'total_drunk': 0,
                 'drunk_degree': 0,
-                'avatar_base64': avatar_base64,
-                'original_base64': original_base64
+                'avatar_base64': photo_base64
             })
     
     st.markdown("---")
@@ -1322,7 +1026,7 @@ elif st.session_state.game_state == 'playing':
         st.session_state.game_state = 'finished'
         st.rerun()
 
-# ゲーム終了画面（高度なアニメアバター対応）
+# ゲーム終了画面（顔写真対応）
 elif st.session_state.game_state == 'finished':
     st.markdown("---")
     st.markdown("# 🎉 ゲーム終了！最終ランキング")
