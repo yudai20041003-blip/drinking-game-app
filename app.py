@@ -3,6 +3,9 @@ import streamlit.components.v1 as components
 import random
 import time
 import json
+import base64
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
+from io import BytesIO
 
 # AIモジュール（オプション）
 try:
@@ -102,6 +105,17 @@ st.markdown("""
         background: rgba(255,0,0,0.2);
         border-color: rgba(255,0,0,0.6);
     }
+    
+    /* アバタープレビュー */
+    .avatar-preview {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        background: rgba(0,0,0,0.05);
+        border-radius: 8px;
+        margin: 5px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -132,12 +146,12 @@ def init_session_state():
         'sudden_event_player': None,
         'sudden_event_drink': None,
         # 口頭回答クイズシステム
-        'quiz_phase': 'none',  # 'none', 'active', 'result'
-        'quiz_list': [],  # 全クイズリスト
-        'current_quiz_index': 0,  # 現在のクイズ番号
-        'quiz_participants': [],  # 参加者リスト
-        'quiz_eliminated': [],  # 正解して脱落した人
-        'quiz_excluded': None,  # 不参加者（飲んだ人）
+        'quiz_phase': 'none',
+        'quiz_list': [],
+        'current_quiz_index': 0,
+        'quiz_participants': [],
+        'quiz_eliminated': [],
+        'quiz_excluded': None,
         # 連続当たり救済システム
         'last_picked_rounds': {}
     }
@@ -147,6 +161,93 @@ def init_session_state():
             st.session_state[key] = default_value
 
 init_session_state()
+
+# 画像処理・アバター生成関数群
+def image_to_base64(image_file, max_size=(96, 96)):
+    """画像をBase64エンコードして保存用に変換"""
+    try:
+        img = Image.open(image_file)
+        img = img.convert('RGB')
+        
+        # 正方形にクロップ
+        width, height = img.size
+        min_size = min(width, height)
+        left = (width - min_size) / 2
+        top = (height - min_size) / 2
+        right = (width + min_size) / 2
+        bottom = (height + min_size) / 2
+        img = img.crop((left, top, right, bottom))
+        
+        # リサイズ
+        img = img.resize(max_size, Image.Resampling.LANCZOS)
+        
+        buffered = BytesIO()
+        img.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+    except Exception as e:
+        st.error(f"画像処理エラー: {e}")
+        return None
+
+def create_circle_mask(img, size=(96, 96)):
+    """円形マスクを適用"""
+    img = img.resize(size, Image.Resampling.LANCZOS)
+    mask = Image.new('L', size, 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size[0], size[1]), fill=255)
+    
+    result = Image.new('RGBA', size, (0, 0, 0, 0))
+    img_rgba = img.convert('RGBA')
+    result.paste(img_rgba, (0, 0), mask)
+    return result
+
+def generate_lightweight_avatar(image_file, style="cartoon"):
+    """軽量AIアバター生成（外部API不要）"""
+    try:
+        img = Image.open(image_file)
+        img = img.convert('RGB')
+        
+        # 正方形にクロップ
+        width, height = img.size
+        min_size = min(width, height)
+        left = (width - min_size) / 2
+        top = (height - min_size) / 2
+        right = (width + min_size) / 2
+        bottom = (height + min_size) / 2
+        img = img.crop((left, top, right, bottom))
+        
+        if style == "pixel":
+            # ピクセルアート風
+            small = img.resize((24, 24), Image.NEAREST)
+            stylized = small.resize((96, 96), Image.NEAREST)
+        elif style == "mono":
+            # モノクローム風
+            stylized = ImageOps.posterize(img.resize((96, 96)), bits=4)
+            stylized = ImageOps.autocontrast(stylized)
+            gray = ImageOps.grayscale(stylized)
+            stylized = ImageOps.colorize(gray, black="#2c3e50", white="#ecf0f1")
+        else:
+            # カートゥーン風（デフォルト）
+            img = img.resize((96, 96))
+            # 色数を減らす
+            quantized = img.quantize(colors=12).convert('RGB')
+            # エッジを強調
+            edges = img.filter(ImageFilter.FIND_EDGES)
+            edges = ImageOps.autocontrast(edges.convert('L'))
+            edges = edges.point(lambda p: 0 if p < 50 else 255)
+            edges_rgb = ImageOps.colorize(edges, black="#000000", white="#ffffff")
+            # 合成
+            stylized = Image.blend(quantized, edges_rgb.convert('RGB'), alpha=0.1)
+        
+        # 円形クロップ
+        circular = create_circle_mask(stylized)
+        
+        buffered = BytesIO()
+        circular.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode()
+        
+    except Exception as e:
+        st.error(f"アバター生成エラー: {e}")
+        return None
 
 # ゲームロジック関数群
 def calculate_drink_amount(player, multiplier_factor=1.0):
@@ -218,8 +319,6 @@ def generate_ai_quiz_batch(num_quizzes):
             {"question": "虹は何色？", "answer": "7色", "hint": "赤橙黄緑青藍紫"},
             {"question": "干支は全部で何種類？", "answer": "12種類", "hint": "ねずみから始まる"}
         ]
-        
-        # 必要な数だけランダムに選択
         return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
     try:
@@ -250,7 +349,6 @@ def generate_ai_quiz_batch(num_quizzes):
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
         
-        # JSONパース処理
         text = response.text.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
@@ -259,7 +357,6 @@ def generate_ai_quiz_batch(num_quizzes):
         
         quiz_list = json.loads(text)
         
-        # バリデーション
         valid_quizzes = []
         for quiz in quiz_list:
             if isinstance(quiz, dict) and all(k in quiz for k in ("question", "answer")):
@@ -270,7 +367,6 @@ def generate_ai_quiz_batch(num_quizzes):
         if len(valid_quizzes) >= num_quizzes:
             return valid_quizzes[:num_quizzes]
         else:
-            # 不足分をフォールバックで補完
             fallback_quizzes = [
                 {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
                 {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
@@ -290,7 +386,7 @@ def generate_ai_quiz_batch(num_quizzes):
         return random.choices(fallback_quizzes, k=num_quizzes)
 
 def create_roulette_html(players, selected_index=None, spinning=False):
-    """スマホ完全対応の美しいルーレット"""
+    """アバター対応のスマホ完全対応ルーレット"""
     num_players = len(players)
     colors = ['#FF6666', '#4ECDCA', '#4587D1', '#FFA07A', '#98D8C8',
               '#F7DC6F', '#88BFCE', '#B5C1E2', '#B8B195', '#C8C6B4',
@@ -316,16 +412,27 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     else:
         total_rotation = 0
     
+    # アバター対応ラベル生成
     labels_html = ""
     for i, player in enumerate(players):
         label_angle = i * angle_per_section + angle_per_section / 2
         name = str(player['name']).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
         
-        labels_html += f"""
-        <div class="player-label" style="--angle: {label_angle}deg;">
-            <span>{name}</span>
-        </div>
-        """
+        if player.get('avatar_base64'):
+            # アバターがある場合
+            labels_html += f"""
+            <div class="player-avatar" style="--angle: {label_angle}deg;">
+                <img src="data:image/png;base64,{player['avatar_base64']}" alt="{name}" class="avatar-image"/>
+                <div class="name-overlay">{name}</div>
+            </div>
+            """
+        else:
+            # アバターがない場合（従来通り）
+            labels_html += f"""
+            <div class="player-label" style="--angle: {label_angle}deg;">
+                <span>{name}</span>
+            </div>
+            """
     
     html_content = f"""
 <!DOCTYPE html>
@@ -403,6 +510,34 @@ def create_roulette_html(players, selected_index=None, spinning=False):
             border-radius: 12px;
             backdrop-filter: blur(4px);
         }}
+        .player-avatar {{
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: rotate(var(--angle)) translateY(calc(-1 * (min(90vw, 90vh, 480px) * 0.40))) rotate(calc(-1 * var(--angle)));
+            transform-origin: center center;
+            pointer-events: none;
+            text-align: center;
+        }}
+        .avatar-image {{
+            width: clamp(50px, 10vw, 70px);
+            height: clamp(50px, 10vw, 70px);
+            border-radius: 50%;
+            border: 3px solid white;
+            object-fit: cover;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+            display: block;
+            margin: 0 auto 5px auto;
+        }}
+        .name-overlay {{
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: clamp(8px, 1.8vw, 12px);
+            font-weight: bold;
+            white-space: nowrap;
+        }}
         .center-circle {{
             position: absolute;
             top: 50%;
@@ -429,10 +564,13 @@ def create_roulette_html(players, selected_index=None, spinning=False):
         }}
         
         @media (max-width: 480px) {{
-            .player-label span {{
-                font-size: 10px;
-                padding: 2px 5px;
-                max-width: 50px;
+            .avatar-image {{
+                width: 40px;
+                height: 40px;
+            }}
+            .name-overlay {{
+                font-size: 8px;
+                padding: 1px 4px;
             }}
         }}
     </style>
@@ -474,7 +612,7 @@ def create_roulette_html(players, selected_index=None, spinning=False):
     return html_content
 
 def display_status():
-    """現在のステータス表示"""
+    """アバター対応のステータス表示"""
     st.markdown("---")
     st.subheader("📊 現在の酔い度")
     
@@ -483,6 +621,8 @@ def display_status():
     for i, p in enumerate(sorted_players, 1):
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
+            if p.get('avatar_base64'):
+                st.image(base64.b64decode(p['avatar_base64']), width=40)
             st.write(f"**{i}. {p['name']}**")
         with col2:
             st.progress(p['drunk_degree'] / 100)
@@ -491,7 +631,7 @@ def display_status():
 
 # メインアプリケーション
 st.title("🍶 AIルーレット飲みゲーム")
-st.caption("スマホ対応・口頭クイズ機能付き！")
+st.caption("スマホ対応・口頭クイズ＆AIアバター機能付き！")
 
 # メニュー画面
 if st.session_state.game_state == 'menu':
@@ -507,6 +647,7 @@ if st.session_state.game_state == 'menu':
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
         - **🗣️ 口頭クイズシステム**: 人数-2問で早抜けゲーム
+        - **🤖 軽量AIアバター生成**: 外部API不要で即座に生成
         - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
@@ -514,7 +655,18 @@ if st.session_state.game_state == 'menu':
         - 突発イベントもあり！
         """)
         
-        # リモートプレイの案内
+        with st.expander("🎨 AIアバター機能について", expanded=False):
+            st.markdown("""
+            **軽量AIアバター生成の特徴:**
+            - **外部API不要**: 追加費用なし
+            - **即座に生成**: リアルタイム処理
+            - **3つのスタイル**:
+              - カートゥーン風（色数削減+エッジ強調）
+              - ピクセルアート風（レトロゲーム風）
+              - モノクローム風（グレースケール）
+            - **プライバシー配慮**: 写真はセッション内のみ保持
+            """)
+        
         with st.expander("🌐 リモートプレイの方法", expanded=False):
             st.markdown("""
             **推奨方法: 画面共有**
@@ -522,23 +674,21 @@ if st.session_state.game_state == 'menu':
             1. **ゲームマスター**が一人、このアプリを操作
             2. **Zoom/Meet/Discord**などで画面を共有
             3. 参加者は共有画面を見ながら**音声**で参加
-            4. クイズは口頭で答える → マスターが正解ボタンを押す
-            
-            **メリット:**
-            - 設定が簡単で安定動作
-            - 全員が同じ画面を見て一体感
-            - 音声通話で盛り上がる
-            - スマホでも快適に参加可能
+            4. 顔写真は事前に送ってもらうか、リモートで撮影指示
+            5. クイズは口頭で答える → マスターが正解ボタンを押す
             """)
     
     with col2:
         st.markdown("### ⚙️ AI機能状態")
         if GEMINI_API_KEY and AI_AVAILABLE:
-            st.success("✅ AI機能: 有効")
+            st.success("✅ Gemini AI: 有効")
             st.caption("クイズ自動生成可能")
         else:
-            st.info("ℹ️ AI機能: 無効")
+            st.info("ℹ️ Gemini AI: 無効")
             st.caption("固定クイズで動作")
+        
+        st.success("✅ 軽量アバター生成: 有効")
+        st.caption("外部API不要で動作")
     
     st.markdown("---")
     
@@ -564,7 +714,7 @@ if st.session_state.game_state == 'menu':
             st.session_state.quiz_phase = 'none'
             st.rerun()
 
-# プレイヤー入力画面
+# プレイヤー入力画面（顔写真・AIアバター対応）
 elif st.session_state.game_state == 'input_players':
     st.markdown("---")
     st.subheader("👥 参加者情報の入力")
@@ -577,6 +727,7 @@ elif st.session_state.game_state == 'input_players':
     
     for i in range(num_players):
         with st.expander(f"プレイヤー {i+1}", expanded=True):
+            # 基本情報
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -591,13 +742,68 @@ elif st.session_state.game_state == 'input_players':
             with col4:
                 cup_type = st.selectbox("基準量", ['おちょこ', 'ジョッキ', 'どちらも'], key=f"cup_{i}")
             
+            # 顔写真・アバター設定
+            st.markdown("**📸 顔写真・AIアバター設定（任意）**")
+            
+            col_photo1, col_photo2 = st.columns(2)
+            
+            avatar_base64 = None
+            
+            with col_photo1:
+                uploaded_file = st.file_uploader(
+                    "写真を選択", 
+                    type=['jpg', 'jpeg', 'png'], 
+                    key=f"upload_{i}",
+                    help="正方形に近い写真がおすすめ"
+                )
+                
+                if uploaded_file:
+                    st.image(uploaded_file, width=80, caption="アップロード写真")
+            
+            with col_photo2:
+                captured_photo = st.camera_input(f"📸 {name}の写真を撮る", key=f"camera_{i}")
+                
+                if captured_photo:
+                    st.image(captured_photo, width=80, caption="撮影写真")
+            
+            # アバター生成
+            source_image = uploaded_file if uploaded_file else captured_photo
+            
+            if source_image:
+                col_style, col_generate = st.columns(2)
+                
+                with col_style:
+                    avatar_style = st.selectbox(
+                        "アバタースタイル",
+                        ["cartoon", "pixel", "mono"],
+                        format_func=lambda x: {"cartoon": "🎨 カートゥーン", "pixel": "🕹️ ピクセル", "mono": "⚫ モノクローム"}[x],
+                        key=f"style_{i}"
+                    )
+                
+                with col_generate:
+                    if st.button(f"🤖 アバター生成", key=f"generate_{i}", use_container_width=True):
+                        with st.spinner("アバター生成中..."):
+                            avatar_base64 = generate_lightweight_avatar(source_image, avatar_style)
+                        
+                        if avatar_base64:
+                            st.success("アバター生成完了！")
+                        else:
+                            st.error("アバター生成に失敗しました")
+                
+                # 生成されたアバターの表示
+                if avatar_base64:
+                    st.markdown('<div class="avatar-preview">', unsafe_allow_html=True)
+                    st.image(base64.b64decode(avatar_base64), width=60, caption="生成アバター")
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
             players_temp.append({
                 'name': name,
                 'strength': strength,
                 'preference': preference,
                 'cup_type': cup_type,
                 'total_drunk': 0,
-                'drunk_degree': 0
+                'drunk_degree': 0,
+                'avatar_base64': avatar_base64
             })
     
     st.markdown("---")
@@ -614,9 +820,9 @@ elif st.session_state.game_state == 'input_players':
         st.session_state.quiz_phase = 'none'
         st.rerun()
 
-# ゲーム中
+# ゲーム中（口頭クイズシステム統合）
 elif st.session_state.game_state == 'playing':
-    # 途中終了ボタン（常に表示）
+    # 途中終了ボタン
     col_title, col_end = st.columns([4, 1])
     with col_title:
         st.markdown(f"### 🎲 ラウンド {st.session_state.round_count + 1}/{st.session_state.max_rounds}")
@@ -632,12 +838,10 @@ elif st.session_state.game_state == 'playing':
             st.markdown('<div class="quiz-container">', unsafe_allow_html=True)
             st.markdown("## 🗣️ 口頭クイズタイム！")
             
-            # 現在のクイズ表示
             current_quiz = st.session_state.quiz_list[st.session_state.current_quiz_index]
             st.markdown(f'<div class="quiz-question">第{st.session_state.current_quiz_index + 1}問: {current_quiz["question"]}</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="quiz-hint">💡 ヒント: {current_quiz.get("hint", "がんばって！")}</div>', unsafe_allow_html=True)
             
-            # 正解表示（マスター用）
             with st.expander("👀 正解を確認（マスター用）", expanded=False):
                 st.success(f"正解: **{current_quiz['answer']}**")
             
@@ -654,7 +858,6 @@ elif st.session_state.game_state == 'playing':
                 st.markdown(f"**🍷 不参加**: {st.session_state.quiz_excluded} (直前に飲んだため)")
             
             if len(remaining) > 2:
-                # 正解者選択
                 selected_correct_player = st.selectbox(
                     "🎯 正解した人は誰ですか？",
                     ['選択してください'] + remaining,
@@ -668,7 +871,6 @@ elif st.session_state.game_state == 'playing':
                         st.session_state.quiz_eliminated.append(selected_correct_player)
                         st.success(f"🎉 {selected_correct_player}さん正解！クイズから脱落")
                         
-                        # 次のクイズへ
                         if st.session_state.current_quiz_index < len(st.session_state.quiz_list) - 1:
                             st.session_state.current_quiz_index += 1
                         else:
@@ -684,7 +886,6 @@ elif st.session_state.game_state == 'playing':
                         st.rerun()
                         
             else:
-                # 残り2人以下 → 結果へ
                 st.info("残りが2人以下になりました。クイズ終了です。")
                 if st.button("📊 結果発表！", use_container_width=True, type="primary"):
                     st.session_state.quiz_phase = 'result'
@@ -694,7 +895,6 @@ elif st.session_state.game_state == 'playing':
             st.markdown("---")
             st.markdown("## 🎉 クイズ結果発表")
             
-            # 結果表示
             remaining = [p for p in st.session_state.quiz_participants if p not in st.session_state.quiz_eliminated]
             
             if st.session_state.quiz_eliminated:
@@ -711,7 +911,6 @@ elif st.session_state.game_state == 'playing':
                     st.markdown(f'<div class="participant-card penalty-card">💥 {name}</div>', unsafe_allow_html=True)
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                # ペナルティ適用
                 for player in st.session_state.players:
                     if player['name'] in remaining:
                         penalty_multiplier = 0.5
@@ -738,7 +937,6 @@ elif st.session_state.game_state == 'playing':
 
         # 通常のルーレット処理
         else:
-            # ルーレット表示
             if st.session_state.spinning:
                 components.html(
                     create_roulette_html(st.session_state.players, 
@@ -769,7 +967,6 @@ elif st.session_state.game_state == 'playing':
             with col1:
                 if st.button("🎯 ルーレットを回す", use_container_width=True, type="primary", 
                             disabled=st.session_state.spinning):
-                    # スマート選択実行
                     selected_index = smart_player_selection(st.session_state.players)
                     selected_player = st.session_state.players[selected_index]
                     
@@ -808,18 +1005,15 @@ elif st.session_state.game_state == 'playing':
             
             with col2:
                 if st.session_state.selected_player_index is not None and not st.session_state.spinning:
-                    # クイズフェーズへ移行するボタン
                     if st.button("🗣️ クイズタイムで一息", use_container_width=True, type="secondary"):
-                        # クイズ数を計算（人数-2）
-                        num_participants = len(st.session_state.players) - 1  # 飲んだ人を除く
-                        if num_participants < 3:  # 最低3人必要（最後に2人残すため）
+                        num_participants = len(st.session_state.players) - 1
+                        if num_participants < 3:
                             st.warning("クイズに参加できる人が少なすぎます。（飲んだ人を除いて3人以上必要）")
                         else:
-                            num_quizzes = num_participants - 2  # 最後の2人になるまで
+                            num_quizzes = num_participants - 2
                             st.session_state.quiz_list = generate_ai_quiz_batch(num_quizzes)
                             st.session_state.current_quiz_index = 0
                             
-                            # 参加者設定（飲んだ人を除く）
                             excluded_player = st.session_state.last_selected
                             participants = [p['name'] for p in st.session_state.players if p['name'] != excluded_player]
                             
@@ -849,7 +1043,7 @@ elif st.session_state.game_state == 'playing':
                     st.error(f"⚡ **{st.session_state.sudden_event_player}**さん、アウト！")
                     st.warning(f"🍷 飲む量: **{st.session_state.sudden_event_drink}**")
         
-        # 現在のステータス
+        # アバター対応ステータス表示
         if not st.session_state.spinning and st.session_state.quiz_phase == 'none':
             display_status()
     
@@ -857,7 +1051,7 @@ elif st.session_state.game_state == 'playing':
         st.session_state.game_state = 'finished'
         st.rerun()
 
-# ゲーム終了画面
+# ゲーム終了画面（アバター対応）
 elif st.session_state.game_state == 'finished':
     st.markdown("---")
     st.markdown("# 🎉 ゲーム終了！最終ランキング")
@@ -867,7 +1061,7 @@ elif st.session_state.game_state == 'finished':
     
     for i, p in enumerate(sorted_players, 1):
         with st.container():
-            col1, col2, col3, col4 = st.columns([1, 2, 2, 2])
+            col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 2, 2])
             
             with col1:
                 medals = ["", "🥇", "🥈", "🥉"]
@@ -875,12 +1069,16 @@ elif st.session_state.game_state == 'finished':
                 st.markdown(f"### {medal} {i}位")
             
             with col2:
-                st.markdown(f"**{p['name']}**")
+                if p.get('avatar_base64'):
+                    st.image(base64.b64decode(p['avatar_base64']), width=50)
             
             with col3:
-                st.progress(p['drunk_degree'] / 100)
+                st.markdown(f"**{p['name']}**")
             
             with col4:
+                st.progress(p['drunk_degree'] / 100)
+            
+            with col5:
                 st.write(f"酔い度: {p['drunk_degree']:.1f}%")
                 st.write(f"飲んだ量: {p['total_drunk']:.1f}杯分")
     
