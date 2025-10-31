@@ -843,8 +843,8 @@ if st.session_state.game_state == 'menu':
         
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
-        - **🗣️ 口頭クイズシステム**: 人数-2問で早抜けゲーム
-        - **🎨 高度なアニメアバター生成**: 誇張していても本人とわかるアニメ風変換
+        - **🗣️ 口頭クイズシステム**: 最後の1人が飲むサバイバルクイズ
+        - **🎨 ジブリ風アバター生成**: ジブリ映画のキャラクターのような変換
         - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
@@ -1113,7 +1113,7 @@ elif st.session_state.game_state == 'playing':
             if st.session_state.quiz_excluded:
                 st.markdown(f"**🍷 不参加**: {st.session_state.quiz_excluded} (直前に飲んだため)")
             
-            if len(remaining) > 2:
+            if len(remaining) > 1:
                 selected_correct_player = st.selectbox(
                     "🎯 正解した人は誰ですか？",
                     ['選択してください'] + remaining,
@@ -1142,7 +1142,7 @@ elif st.session_state.game_state == 'playing':
                         st.rerun()
                         
             else:
-                st.info("残りが2人以下になりました。クイズ終了です。")
+                st.info("残りが1人になりました。クイズ終了です。")
                 if st.button("📊 結果発表！", use_container_width=True, type="primary"):
                     st.session_state.quiz_phase = 'result'
                     st.rerun()
@@ -1161,19 +1161,34 @@ elif st.session_state.game_state == 'playing':
                 st.markdown('</div>', unsafe_allow_html=True)
             
             if remaining:
-                st.warning("🐌 最後まで残った人（ペナルティ対象）")
-                st.markdown('<div class="participant-status">', unsafe_allow_html=True)
-                for name in remaining:
-                    st.markdown(f'<div class="participant-card penalty-card">💥 {name}</div>', unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                
-                for player in st.session_state.players:
-                    if player['name'] in remaining:
-                        penalty_multiplier = 0.5
-                        multiplier = calculate_drink_amount(player, penalty_multiplier)
-                        drink_display = get_drink_display(multiplier, player['cup_type'])
-                        update_drunk_degree(player, multiplier)
-                        st.info(f"🍶 {player['name']}のペナルティ: {drink_display}")
+                if len(remaining) == 1:
+                    st.warning("🐌 最後まで残った人（ペナルティ対象）")
+                    st.markdown('<div class="participant-status">', unsafe_allow_html=True)
+                    for name in remaining:
+                        st.markdown(f'<div class="participant-card penalty-card">💥 {name}</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    for player in st.session_state.players:
+                        if player['name'] in remaining:
+                            penalty_multiplier = 1.0
+                            multiplier = calculate_drink_amount(player, penalty_multiplier)
+                            drink_display = get_drink_display(multiplier, player['cup_type'])
+                            update_drunk_degree(player, multiplier)
+                            st.info(f"🍶 {player['name']}のペナルティ: {drink_display}")
+                else:
+                    st.warning(f"🐌 最後まで残った人たち（{len(remaining)}人、ペナルティ対象）")
+                    st.markdown('<div class="participant-status">', unsafe_allow_html=True)
+                    for name in remaining:
+                        st.markdown(f'<div class="participant-card penalty-card">💥 {name}</div>', unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    for player in st.session_state.players:
+                        if player['name'] in remaining:
+                            penalty_multiplier = 0.5
+                            multiplier = calculate_drink_amount(player, penalty_multiplier)
+                            drink_display = get_drink_display(multiplier, player['cup_type'])
+                            update_drunk_degree(player, multiplier)
+                            st.info(f"🍶 {player['name']}のペナルティ: {drink_display}")
             
             if st.session_state.quiz_excluded:
                 st.info(f"🍷 不参加: {st.session_state.quiz_excluded}（直前に飲んだため）")
@@ -1263,10 +1278,10 @@ elif st.session_state.game_state == 'playing':
                 if st.session_state.selected_player_index is not None and not st.session_state.spinning:
                     if st.button("🗣️ クイズタイムで一息", use_container_width=True, type="secondary"):
                         num_participants = len(st.session_state.players) - 1
-                        if num_participants < 3:
-                            st.warning("クイズに参加できる人が少なすぎます。（飲んだ人を除いて3人以上必要）")
+                        if num_participants < 2:
+                            st.warning("クイズに参加できる人が少なすぎます。（飲んだ人を除いて2人以上必要）")
                         else:
-                            num_quizzes = num_participants - 2
+                            num_quizzes = num_participants - 1
                             st.session_state.quiz_list = generate_ai_quiz_batch(num_quizzes)
                             st.session_state.current_quiz_index = 0
                             
