@@ -257,24 +257,9 @@ def update_drunk_degree(player, multiplier):
     player['drunk_degree'] = min(player['drunk_degree'], 100)
     player['total_drunk'] += multiplier
 
-def calculate_player_weight(player):
-    """公平性を考慮した重み計算（連続当たり救済付き）"""
-    base = 0.4 + (1.0 - player["drunk_degree"]/100.0) * 1.2
-    adj = 1.0 + (5 - player["strength"]) * 0.05 + (player["preference"] - 3) * 0.05
-    weight = max(0.1, base * adj)
-    
-    # 連続当たり救済システム
-    player_name = player['name']
-    last_picked = st.session_state.last_picked_rounds.get(player_name, -999)
-    recent_penalty = 0.5 if st.session_state.round_count - last_picked <= 2 else 1.0
-    
-    return weight * recent_penalty
-
 def smart_player_selection(players):
-    """AI強化版プレイヤー選択（重み付きランダム）"""
-    weights = [calculate_player_weight(p) for p in players]
-    selected_player = random.choices(players, weights=weights)[0]
-    selected_index = players.index(selected_player)
+    """完全ランダムなプレイヤー選択"""
+    selected_index = random.randint(0, len(players) - 1)
     return selected_index
 
 def generate_ai_quiz_batch(num_quizzes):
@@ -620,13 +605,13 @@ if st.session_state.game_state == 'menu':
     with col1:
         st.markdown("""
         ### 🎯 ゲームの目的
-        このゲームは、**みんなの酔い度を均等にする**ための飲みゲームです！
+        このゲームは、**完全ランダムルーレット**で盛り上がる飲みゲームです！
         
         **✨ 新機能追加:**
         - **📱 完全スマホ対応**: どこでも快適にプレイ
         - **🗣️ 口頭クイズシステム**: 最後の1人が飲むサバイバルクイズ
         - **📸 顔写真ルーレット**: 写真をアップロードしてルーレットに表示
-        - **⚖️ 連続当たり救済**: 同じ人が連続で選ばれにくい
+        - **🎲 完全ランダム選択**: 誰が選ばれるか予測不可能！
         - **⏹️ 途中終了機能**: いつでもゲームを終了可能
         - お酒の強さと好き嫌いに応じて飲み量を調整
         - 15ラウンドのルーレット
