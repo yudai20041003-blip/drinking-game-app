@@ -662,6 +662,13 @@ if st.session_state.game_state == 'menu':
             st.info("ℹ️ Gemini AI: 無効")
             st.caption("固定クイズで動作")
         
+        # デバッグ情報
+        with st.expander("🔍 デバッグ情報", expanded=False):
+            st.write(f"AI_AVAILABLE: {AI_AVAILABLE}")
+            st.write(f"GEMINI_API_KEY: {'設定済み' if GEMINI_API_KEY else '未設定'}")
+            if GEMINI_API_KEY:
+                st.write(f"APIキーの最初の10文字: {GEMINI_API_KEY[:10]}...")
+        
         st.success("✅ 顔写真ルーレット: 有効")
         st.caption("写真そのまま表示")
     
