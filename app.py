@@ -249,7 +249,11 @@ def smart_player_selection(players):
 
 def generate_ai_quiz_batch(num_quizzes):
     """指定された数のクイズを一度に生成"""
+    # デバッグ情報
+    st.info(f"🔍 デバッグ: AI_AVAILABLE={AI_AVAILABLE}, GEMINI_API_KEY={'設定済み' if GEMINI_API_KEY else '未設定'}")
+    
     if not GEMINI_API_KEY or not AI_AVAILABLE:
+        st.warning("⚠️ Gemini APIが利用できません。固定クイズを使用します。")
         fallback_quizzes = [
             {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
             {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
