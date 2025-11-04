@@ -261,21 +261,21 @@ def generate_ai_quiz_batch(num_quizzes):
         log_msg = "⚠️ Gemini APIが利用できません。固定クイズを使用します。"
         st.session_state.quiz_generation_log.append(log_msg)
         fallback_quizzes = [
-            {"question": "アインシュタインの相対性理論で有名な式は？", "answer": "E=mc²", "hint": "エネルギーと質量の関係"},
-            {"question": "『吾輩は猫である』の作者は？", "answer": "夏目漱石", "hint": "明治時代の文豪"},
-            {"question": "デカルトの有名な言葉『我思う、ゆえに』の続きは？", "answer": "我あり", "hint": "哲学的命題"},
-            {"question": "日本で最初のノーベル賞受賞者は？", "answer": "湯川秀樹", "hint": "物理学賞"},
-            {"question": "DNAの二重らせん構造を発見した科学者は？（姓のみ）", "answer": "ワトソン", "hint": "クリックと共同研究"},
-            {"question": "『罪と罰』の作者は？", "answer": "ドストエフスキー", "hint": "ロシアの文豪"},
-            {"question": "光の速度は秒速何km？（概数）", "answer": "30万km", "hint": "約30万"},
-            {"question": "『君の名は。』の監督は？", "answer": "新海誠", "hint": "アニメ映画監督"},
-            {"question": "人間の染色体は何対？", "answer": "23対", "hint": "合計46本"},
-            {"question": "『1984年』の作者は？", "answer": "ジョージ・オーウェル", "hint": "ディストピア小説"},
-            {"question": "日本の初代内閣総理大臣は？", "answer": "伊藤博文", "hint": "明治時代"},
-            {"question": "『モナ・リザ』を描いた画家は？", "answer": "レオナルド・ダ・ヴィンチ", "hint": "ルネサンスの巨匠"},
+            {"question": "『鬼滅の刃』の主人公の名前は？", "answer": "竈門炭治郎", "hint": "たんじろう"},
+            {"question": "『君の名は。』の監督は？", "answer": "新海誠", "hint": "天気の子も監督"},
+            {"question": "『ONE PIECE』の主人公の名前は？", "answer": "ルフィ", "hint": "麦わら帽子"},
+            {"question": "iPhoneを作っている会社は？", "answer": "Apple", "hint": "リンゴのマーク"},
+            {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡と山梨の境"},
+            {"question": "夏目漱石の有名な小説『〇〇は猫である』の〇〇は？", "answer": "吾輩", "hint": "わがはい"},
+            {"question": "水の化学式は？", "answer": "H2O", "hint": "水素2つと酸素1つ"},
             {"question": "元素記号Auは何の元素？", "answer": "金", "hint": "貴金属"},
-            {"question": "『こころ』の作者は？", "answer": "夏目漱石", "hint": "先生と私の物語"},
-            {"question": "ピタゴラスの定理は何の定理？", "answer": "三平方の定理", "hint": "直角三角形"}
+            {"question": "日本の首都は？", "answer": "東京", "hint": "スカイツリーがある"},
+            {"question": "『天空の城ラピュタ』の監督は？", "answer": "宮崎駿", "hint": "ジブリの巨匠"},
+            {"question": "YouTubeを買収した会社は？", "answer": "Google", "hint": "検索エンジン"},
+            {"question": "地球の衛星の名前は？", "answer": "月", "hint": "夜空に見える"},
+            {"question": "ピカチュウが出てくるゲームシリーズは？", "answer": "ポケモン", "hint": "ポケットモンスター"},
+            {"question": "日本の初代内閣総理大臣は？", "answer": "伊藤博文", "hint": "千円札の人だった"},
+            {"question": "オリンピックは何年に一度？", "answer": "4年", "hint": "夏と冬がある"}
         ]
         return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
@@ -295,14 +295,14 @@ def generate_ai_quiz_batch(num_quizzes):
         
         # 簡潔なプロンプト（高速化）
         prompt = f"""
-        大学生向けクイズを{num_quizzes}問作成。JSON配列形式で回答：
+        高校生向けクイズを{num_quizzes}問作成。JSON配列形式で回答：
         [{{"question": "問題", "answer": "正解", "hint": "ヒント"}}]
         
         条件：
-        - 大学生レベル（歴史/科学/文学/哲学/雑学）
-        - 思考・知識を問う
+        - 高校生レベル（流行/アニメ/音楽/歴史/科学/雑学）
+        - 知ってたら嬉しい、知らなくても楽しい
         - 答え1-10文字
-        - 難易度：中程度
+        - 難易度：やや易しめ
         - 日本語
         """
         
