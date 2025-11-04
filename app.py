@@ -320,7 +320,8 @@ def generate_ai_quiz_batch(num_quizzes):
             return valid_quizzes[:num_quizzes]
             
     except Exception as e:
-        st.info(f"AIクイズ生成に失敗: フォールバックを使用")
+        st.error(f"❌ AIクイズ生成エラー: {str(e)}")
+        st.info(f"フォールバック（固定クイズ）を使用します")
         fallback_quizzes = [
             {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
             {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
