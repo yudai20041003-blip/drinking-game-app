@@ -302,7 +302,8 @@ def generate_ai_quiz_batch(num_quizzes):
         - バラエティに富んだジャンル
         """
         
-        model = genai.GenerativeModel('gemini-pro')
+        # 最新のGeminiモデルを使用
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         
         log_msg = "✅ AI応答を受信しました"
