@@ -820,6 +820,19 @@ elif st.session_state.game_state == 'playing':
             
             st.markdown('</div>', unsafe_allow_html=True)
             
+            # クイズ生成ログを表示
+            if st.session_state.quiz_generation_log:
+                with st.expander("🔍 クイズ生成ログ", expanded=True):
+                    for log in st.session_state.quiz_generation_log:
+                        if "❌" in log or "エラー" in log:
+                            st.error(log)
+                        elif "⚠️" in log:
+                            st.warning(log)
+                        elif "✅" in log or "📝" in log:
+                            st.success(log)
+                        else:
+                            st.info(log)
+            
             # 参加者状況表示
             remaining = [p for p in st.session_state.quiz_participants if p not in st.session_state.quiz_eliminated]
             
