@@ -261,16 +261,21 @@ def generate_ai_quiz_batch(num_quizzes):
         log_msg = "⚠️ Gemini APIが利用できません。固定クイズを使用します。"
         st.session_state.quiz_generation_log.append(log_msg)
         fallback_quizzes = [
-            {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
-            {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
-            {"question": "日本の首都は？", "answer": "東京", "hint": "関東地方にある"},
-            {"question": "地球の衛星は？", "answer": "月", "hint": "夜空に見える"},
-            {"question": "水の化学式は？", "answer": "H2O", "hint": "水素と酸素"},
-            {"question": "一週間は何日？", "answer": "7日", "hint": "月曜から日曜まで"},
-            {"question": "日本の国鳥は？", "answer": "キジ", "hint": "桃太郎の仲間"},
-            {"question": "オリンピックは何年に一度？", "answer": "4年", "hint": "夏と冬がある"},
-            {"question": "虹は何色？", "answer": "7色", "hint": "赤橙黄緑青藍紫"},
-            {"question": "干支は全部で何種類？", "answer": "12種類", "hint": "ねずみから始まる"}
+            {"question": "アインシュタインの相対性理論で有名な式は？", "answer": "E=mc²", "hint": "エネルギーと質量の関係"},
+            {"question": "『吾輩は猫である』の作者は？", "answer": "夏目漱石", "hint": "明治時代の文豪"},
+            {"question": "デカルトの有名な言葉『我思う、ゆえに』の続きは？", "answer": "我あり", "hint": "哲学的命題"},
+            {"question": "日本で最初のノーベル賞受賞者は？", "answer": "湯川秀樹", "hint": "物理学賞"},
+            {"question": "DNAの二重らせん構造を発見した科学者は？（姓のみ）", "answer": "ワトソン", "hint": "クリックと共同研究"},
+            {"question": "『罪と罰』の作者は？", "answer": "ドストエフスキー", "hint": "ロシアの文豪"},
+            {"question": "光の速度は秒速何km？（概数）", "answer": "30万km", "hint": "約30万"},
+            {"question": "『君の名は。』の監督は？", "answer": "新海誠", "hint": "アニメ映画監督"},
+            {"question": "人間の染色体は何対？", "answer": "23対", "hint": "合計46本"},
+            {"question": "『1984年』の作者は？", "answer": "ジョージ・オーウェル", "hint": "ディストピア小説"},
+            {"question": "日本の初代内閣総理大臣は？", "answer": "伊藤博文", "hint": "明治時代"},
+            {"question": "『モナ・リザ』を描いた画家は？", "answer": "レオナルド・ダ・ヴィンチ", "hint": "ルネサンスの巨匠"},
+            {"question": "元素記号Auは何の元素？", "answer": "金", "hint": "貴金属"},
+            {"question": "『こころ』の作者は？", "answer": "夏目漱石", "hint": "先生と私の物語"},
+            {"question": "ピタゴラスの定理は何の定理？", "answer": "三平方の定理", "hint": "直角三角形"}
         ]
         return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
@@ -294,7 +299,7 @@ def generate_ai_quiz_batch(num_quizzes):
             available_models = []
         
         prompt = f"""
-        飲み会で盛り上がる簡単なクイズを{num_quizzes}問作ってください。
+        大学生の飲み会で盛り上がる、思考力と知識を問うクイズを{num_quizzes}問作ってください。
         以下のJSON配列形式で回答してください：
         [
             {{
@@ -310,11 +315,20 @@ def generate_ai_quiz_batch(num_quizzes):
         ]
         
         条件：
-        - 一般常識レベル
-        - 答えは1-5文字程度
-        - 楽しい雰囲気になるもの
+        - 大学生レベルの知識・教養を問う問題
+        - 論理的思考や推理が必要な問題も含める
+        - ジャンル例：歴史、科学、文学、哲学、経済、心理学、時事問題、雑学など
+        - 答えは1-10文字程度（人名、用語、概念など）
+        - 難しすぎず、でも考えさせられる絶妙な難易度
+        - 正解したときに「おお！」と盛り上がるもの
         - 日本語で出題
         - バラエティに富んだジャンル
+        
+        問題例：
+        - 「アインシュタインの相対性理論で有名な式は？」→「E=mc²」
+        - 「『吾輩は猫である』の作者は？」→「夏目漱石」
+        - 「デカルトの有名な言葉『我思う、ゆえに』の続きは？」→「我あり」
+        - 「日本で最初のノーベル賞受賞者は？」→「湯川秀樹」
         """
         
         # 利用可能なモデルがあればそれを優先、なければフォールバックリスト
