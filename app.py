@@ -173,6 +173,7 @@ def init_session_state():
         'quiz_participants': [],
         'quiz_eliminated': [],
         'quiz_excluded': None,
+        'quiz_generation_log': [],  # クイズ生成ログ
         # 連続当たり救済システム
         'last_picked_rounds': {}
     }
@@ -249,11 +250,16 @@ def smart_player_selection(players):
 
 def generate_ai_quiz_batch(num_quizzes):
     """指定された数のクイズを一度に生成"""
+    # ログをクリア
+    st.session_state.quiz_generation_log = []
+    
     # デバッグ情報
-    st.info(f"🔍 デバッグ: AI_AVAILABLE={AI_AVAILABLE}, GEMINI_API_KEY={'設定済み' if GEMINI_API_KEY else '未設定'}")
+    log_msg = f"🔍 AI_AVAILABLE={AI_AVAILABLE}, GEMINI_API_KEY={'設定済み' if GEMINI_API_KEY else '未設定'}"
+    st.session_state.quiz_generation_log.append(log_msg)
     
     if not GEMINI_API_KEY or not AI_AVAILABLE:
-        st.warning("⚠️ Gemini APIが利用できません。固定クイズを使用します。")
+        log_msg = "⚠️ Gemini APIが利用できません。固定クイズを使用します。"
+        st.session_state.quiz_generation_log.append(log_msg)
         fallback_quizzes = [
             {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
             {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
@@ -269,7 +275,8 @@ def generate_ai_quiz_batch(num_quizzes):
         return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
     try:
-        st.info(f"🤖 AIに{num_quizzes}問のクイズ生成を依頼中...")
+        log_msg = f"🤖 AIに{num_quizzes}問のクイズ生成を依頼中..."
+        st.session_state.quiz_generation_log.append(log_msg)
         
         prompt = f"""
         飲み会で盛り上がる簡単なクイズを{num_quizzes}問作ってください。
@@ -298,7 +305,8 @@ def generate_ai_quiz_batch(num_quizzes):
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
         
-        st.success(f"✅ AI応答を受信しました")
+        log_msg = "✅ AI応答を受信しました"
+        st.session_state.quiz_generation_log.append(log_msg)
         
         text = response.text.strip()
         if "```json" in text:
@@ -307,7 +315,8 @@ def generate_ai_quiz_batch(num_quizzes):
             text = text.split("```")[1]
         
         quiz_list = json.loads(text)
-        st.info(f"📝 AI生成クイズ数: {len(quiz_list)}問")
+        log_msg = f"📝 AI生成クイズ数: {len(quiz_list)}問"
+        st.session_state.quiz_generation_log.append(log_msg)
         
         valid_quizzes = []
         for quiz in quiz_list:
@@ -316,7 +325,8 @@ def generate_ai_quiz_batch(num_quizzes):
                     quiz["hint"] = "がんばって！"
                 valid_quizzes.append(quiz)
         
-        st.success(f"✅ 有効なクイズ: {len(valid_quizzes)}問（必要数: {num_quizzes}問）")
+        log_msg = f"✅ 有効なクイズ: {len(valid_quizzes)}問（必要数: {num_quizzes}問）"
+        st.session_state.quiz_generation_log.append(log_msg)
         
         if len(valid_quizzes) >= num_quizzes:
             return valid_quizzes[:num_quizzes]
@@ -331,8 +341,12 @@ def generate_ai_quiz_batch(num_quizzes):
             return valid_quizzes[:num_quizzes]
             
     except Exception as e:
-        st.error(f"❌ AIクイズ生成エラー: {str(e)}")
-        st.info(f"フォールバック（固定クイズ）を使用します")
+        import traceback
+        error_detail = traceback.format_exc()
+        log_msg = f"❌ AIクイズ生成エラー: {str(e)}"
+        st.session_state.quiz_generation_log.append(log_msg)
+        st.session_state.quiz_generation_log.append(f"詳細: {error_detail}")
+        st.session_state.quiz_generation_log.append("フォールバック（固定クイズ）を使用します")
         fallback_quizzes = [
             {"question": "日本で一番高い山は？", "answer": "富士山", "hint": "静岡県と山梨県の境界"},
             {"question": "1年は平年で何日？", "answer": "365日", "hint": "うるう年は366日"},
@@ -985,17 +999,26 @@ elif st.session_state.game_state == 'playing':
                             st.warning("クイズに参加できる人が少なすぎます。（飲んだ人を除いて2人以上必要）")
                         else:
                             num_quizzes = num_participants - 1
-                            st.session_state.quiz_list = generate_ai_quiz_batch(num_quizzes)
-                            st.session_state.current_quiz_index = 0
                             
-                            excluded_player = st.session_state.last_selected
-                            participants = [p['name'] for p in st.session_state.players if p['name'] != excluded_player]
+                            # クイズ生成を試みる
+                            with st.spinner("クイズを生成中..."):
+                                quiz_list = generate_ai_quiz_batch(num_quizzes)
                             
-                            st.session_state.quiz_participants = participants
-                            st.session_state.quiz_eliminated = []
-                            st.session_state.quiz_excluded = excluded_player
-                            st.session_state.quiz_phase = 'active'
-                            st.rerun()
+                            # 生成に成功したかチェック
+                            if quiz_list and len(quiz_list) > 0:
+                                st.session_state.quiz_list = quiz_list
+                                st.session_state.current_quiz_index = 0
+                                
+                                excluded_player = st.session_state.last_selected
+                                participants = [p['name'] for p in st.session_state.players if p['name'] != excluded_player]
+                                
+                                st.session_state.quiz_participants = participants
+                                st.session_state.quiz_eliminated = []
+                                st.session_state.quiz_excluded = excluded_player
+                                st.session_state.quiz_phase = 'active'
+                                st.rerun()
+                            else:
+                                st.error("❌ クイズの生成に失敗しました。もう一度お試しください。")
             
             with col3:
                 if st.session_state.selected_player_index is not None and not st.session_state.spinning:
