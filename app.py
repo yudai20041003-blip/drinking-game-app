@@ -302,9 +302,15 @@ def generate_ai_quiz_batch(num_quizzes):
         - バラエティに富んだジャンル
         """
         
-        # 最新のGeminiモデルを使用
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        # Gemini 1.5 Flash-latest（最新安定版）
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
+            response = model.generate_content(prompt)
+        except Exception as e:
+            # フォールバック：gemini-proを試す
+            st.session_state.quiz_generation_log.append(f"⚠️ gemini-1.5-flash-latest失敗、代替モデルを試行: {str(e)}")
+            model = genai.GenerativeModel('gemini-1.0-pro-latest')
+            response = model.generate_content(prompt)
         
         log_msg = "✅ AI応答を受信しました"
         st.session_state.quiz_generation_log.append(log_msg)
