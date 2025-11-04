@@ -283,58 +283,36 @@ def generate_ai_quiz_batch(num_quizzes):
         log_msg = f"🤖 AIに{num_quizzes}問のクイズ生成を依頼中..."
         st.session_state.quiz_generation_log.append(log_msg)
         
-        # 利用可能なモデルをリストアップ
+        # 利用可能なモデルをリストアップ（高速化：flashモデル優先、詳細ログなし）
         try:
-            st.session_state.quiz_generation_log.append("📋 利用可能なモデルを確認中...")
             available_models = []
             for model_info in genai.list_models():
                 if 'generateContent' in model_info.supported_generation_methods:
                     available_models.append(model_info.name)
-                    st.session_state.quiz_generation_log.append(f"  ✓ {model_info.name}")
-            
-            if not available_models:
-                st.session_state.quiz_generation_log.append("⚠️ generateContentをサポートするモデルが見つかりませんでした")
         except Exception as e:
             st.session_state.quiz_generation_log.append(f"⚠️ モデルリスト取得エラー: {str(e)[:100]}")
             available_models = []
         
+        # 簡潔なプロンプト（高速化）
         prompt = f"""
-        大学生の飲み会で盛り上がる、思考力と知識を問うクイズを{num_quizzes}問作ってください。
-        以下のJSON配列形式で回答してください：
-        [
-            {{
-                "question": "問題文1",
-                "answer": "正解1", 
-                "hint": "ヒント1"
-            }},
-            {{
-                "question": "問題文2",
-                "answer": "正解2",
-                "hint": "ヒント2"
-            }}
-        ]
+        大学生向けクイズを{num_quizzes}問作成。JSON配列形式で回答：
+        [{{"question": "問題", "answer": "正解", "hint": "ヒント"}}]
         
         条件：
-        - 大学生レベルの知識・教養を問う問題
-        - 論理的思考や推理が必要な問題も含める
-        - ジャンル例：歴史、科学、文学、哲学、経済、心理学、時事問題、雑学など
-        - 答えは1-10文字程度（人名、用語、概念など）
-        - 難しすぎず、でも考えさせられる絶妙な難易度
-        - 正解したときに「おお！」と盛り上がるもの
-        - 日本語で出題
-        - バラエティに富んだジャンル
-        
-        問題例：
-        - 「アインシュタインの相対性理論で有名な式は？」→「E=mc²」
-        - 「『吾輩は猫である』の作者は？」→「夏目漱石」
-        - 「デカルトの有名な言葉『我思う、ゆえに』の続きは？」→「我あり」
-        - 「日本で最初のノーベル賞受賞者は？」→「湯川秀樹」
+        - 大学生レベル（歴史/科学/文学/哲学/雑学）
+        - 思考・知識を問う
+        - 答え1-10文字
+        - 難易度：中程度
+        - 日本語
         """
         
-        # 利用可能なモデルがあればそれを優先、なければフォールバックリスト
+        # flashモデルを優先（高速）
         if available_models:
-            model_names = available_models
-            st.session_state.quiz_generation_log.append(f"🎯 {len(model_names)}個の利用可能なモデルを試します")
+            # flashモデルを最初に並べる
+            flash_models = [m for m in available_models if 'flash' in m.lower()]
+            other_models = [m for m in available_models if 'flash' not in m.lower()]
+            model_names = flash_models + other_models
+            st.session_state.quiz_generation_log.append(f"⚡ 高速モデル優先で試行")
         else:
             model_names = [
                 'gemini-1.5-flash',
@@ -348,23 +326,24 @@ def generate_ai_quiz_batch(num_quizzes):
         response = None
         last_error = None
         
-        for model_name in model_names:
+        # 最初のモデルだけログ表示（高速化）
+        for i, model_name in enumerate(model_names):
             try:
-                st.session_state.quiz_generation_log.append(f"🔄 モデル '{model_name}' を試行中...")
+                if i == 0:
+                    st.session_state.quiz_generation_log.append(f"🔄 '{model_name}' で生成中...")
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
-                st.session_state.quiz_generation_log.append(f"✅ モデル '{model_name}' で成功！")
+                if i > 0:
+                    st.session_state.quiz_generation_log.append(f"✅ '{model_name}' で成功")
                 break
             except Exception as e:
                 last_error = str(e)
-                st.session_state.quiz_generation_log.append(f"⚠️ モデル '{model_name}' 失敗: {str(e)[:100]}")
+                if i == 0:
+                    st.session_state.quiz_generation_log.append(f"⚠️ 失敗、別モデル試行中...")
                 continue
         
         if response is None:
             raise Exception(f"すべてのモデルで失敗しました。最後のエラー: {last_error}")
-        
-        log_msg = "✅ AI応答を受信しました"
-        st.session_state.quiz_generation_log.append(log_msg)
         
         text = response.text.strip()
         if "```json" in text:
@@ -373,8 +352,6 @@ def generate_ai_quiz_batch(num_quizzes):
             text = text.split("```")[1]
         
         quiz_list = json.loads(text)
-        log_msg = f"📝 AI生成クイズ数: {len(quiz_list)}問"
-        st.session_state.quiz_generation_log.append(log_msg)
         
         valid_quizzes = []
         for quiz in quiz_list:
@@ -383,8 +360,7 @@ def generate_ai_quiz_batch(num_quizzes):
                     quiz["hint"] = "がんばって！"
                 valid_quizzes.append(quiz)
         
-        log_msg = f"✅ 有効なクイズ: {len(valid_quizzes)}問（必要数: {num_quizzes}問）"
-        st.session_state.quiz_generation_log.append(log_msg)
+        st.session_state.quiz_generation_log.append(f"✅ クイズ{len(valid_quizzes)}問生成完了")
         
         if len(valid_quizzes) >= num_quizzes:
             return valid_quizzes[:num_quizzes]
