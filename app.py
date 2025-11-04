@@ -269,6 +269,8 @@ def generate_ai_quiz_batch(num_quizzes):
         return random.sample(fallback_quizzes, min(num_quizzes, len(fallback_quizzes)))
     
     try:
+        st.info(f"🤖 AIに{num_quizzes}問のクイズ生成を依頼中...")
+        
         prompt = f"""
         飲み会で盛り上がる簡単なクイズを{num_quizzes}問作ってください。
         以下のJSON配列形式で回答してください：
@@ -296,6 +298,8 @@ def generate_ai_quiz_batch(num_quizzes):
         model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(prompt)
         
+        st.success(f"✅ AI応答を受信しました")
+        
         text = response.text.strip()
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0]
@@ -303,6 +307,7 @@ def generate_ai_quiz_batch(num_quizzes):
             text = text.split("```")[1]
         
         quiz_list = json.loads(text)
+        st.info(f"📝 AI生成クイズ数: {len(quiz_list)}問")
         
         valid_quizzes = []
         for quiz in quiz_list:
@@ -310,6 +315,8 @@ def generate_ai_quiz_batch(num_quizzes):
                 if "hint" not in quiz:
                     quiz["hint"] = "がんばって！"
                 valid_quizzes.append(quiz)
+        
+        st.success(f"✅ 有効なクイズ: {len(valid_quizzes)}問（必要数: {num_quizzes}問）")
         
         if len(valid_quizzes) >= num_quizzes:
             return valid_quizzes[:num_quizzes]
