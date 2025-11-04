@@ -302,15 +302,32 @@ def generate_ai_quiz_batch(num_quizzes):
         - バラエティに富んだジャンル
         """
         
-        # Gemini 1.5 Flash-latest（最新安定版）
-        try:
-            model = genai.GenerativeModel('gemini-1.5-flash-latest')
-            response = model.generate_content(prompt)
-        except Exception as e:
-            # フォールバック：gemini-proを試す
-            st.session_state.quiz_generation_log.append(f"⚠️ gemini-1.5-flash-latest失敗、代替モデルを試行: {str(e)}")
-            model = genai.GenerativeModel('gemini-1.0-pro-latest')
-            response = model.generate_content(prompt)
+        # 複数のモデル名を試す
+        model_names = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-pro',
+            'models/gemini-1.5-flash',
+            'models/gemini-pro'
+        ]
+        
+        response = None
+        last_error = None
+        
+        for model_name in model_names:
+            try:
+                st.session_state.quiz_generation_log.append(f"🔄 モデル '{model_name}' を試行中...")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                st.session_state.quiz_generation_log.append(f"✅ モデル '{model_name}' で成功！")
+                break
+            except Exception as e:
+                last_error = str(e)
+                st.session_state.quiz_generation_log.append(f"⚠️ モデル '{model_name}' 失敗: {str(e)[:100]}")
+                continue
+        
+        if response is None:
+            raise Exception(f"すべてのモデルで失敗しました。最後のエラー: {last_error}")
         
         log_msg = "✅ AI応答を受信しました"
         st.session_state.quiz_generation_log.append(log_msg)
