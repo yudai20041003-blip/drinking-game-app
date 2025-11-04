@@ -278,6 +278,21 @@ def generate_ai_quiz_batch(num_quizzes):
         log_msg = f"🤖 AIに{num_quizzes}問のクイズ生成を依頼中..."
         st.session_state.quiz_generation_log.append(log_msg)
         
+        # 利用可能なモデルをリストアップ
+        try:
+            st.session_state.quiz_generation_log.append("📋 利用可能なモデルを確認中...")
+            available_models = []
+            for model_info in genai.list_models():
+                if 'generateContent' in model_info.supported_generation_methods:
+                    available_models.append(model_info.name)
+                    st.session_state.quiz_generation_log.append(f"  ✓ {model_info.name}")
+            
+            if not available_models:
+                st.session_state.quiz_generation_log.append("⚠️ generateContentをサポートするモデルが見つかりませんでした")
+        except Exception as e:
+            st.session_state.quiz_generation_log.append(f"⚠️ モデルリスト取得エラー: {str(e)[:100]}")
+            available_models = []
+        
         prompt = f"""
         飲み会で盛り上がる簡単なクイズを{num_quizzes}問作ってください。
         以下のJSON配列形式で回答してください：
@@ -302,14 +317,19 @@ def generate_ai_quiz_batch(num_quizzes):
         - バラエティに富んだジャンル
         """
         
-        # 複数のモデル名を試す
-        model_names = [
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-pro',
-            'models/gemini-1.5-flash',
-            'models/gemini-pro'
-        ]
+        # 利用可能なモデルがあればそれを優先、なければフォールバックリスト
+        if available_models:
+            model_names = available_models
+            st.session_state.quiz_generation_log.append(f"🎯 {len(model_names)}個の利用可能なモデルを試します")
+        else:
+            model_names = [
+                'gemini-1.5-flash',
+                'gemini-1.5-pro',
+                'gemini-pro',
+                'models/gemini-1.5-flash',
+                'models/gemini-pro'
+            ]
+            st.session_state.quiz_generation_log.append("🔄 フォールバック（固定リスト）を使用します")
         
         response = None
         last_error = None
