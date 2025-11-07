@@ -772,8 +772,21 @@ if st.session_state.game_state == 'menu':
     
     st.markdown("---")
     
+    # デモビデオ/GIFセクション
+    demo_video_url = st.secrets.get("DEMO_VIDEO_URL", "")
+    if demo_video_url:
+        st.markdown("### 🎥 使い方デモ（30秒）")
+        # YouTubeかどうかチェック
+        if "youtube.com" in demo_video_url or "youtu.be" in demo_video_url:
+            st.video(demo_video_url)
+        else:
+            # GIFや直接リンクの場合
+            st.image(demo_video_url)
+        st.caption("💡 動画を見て、使い方をサクッと理解しよう！")
+        st.markdown("---")
+    
     # デモモードボタン（初回ユーザー向け）
-    if st.button("🎬 3分デモを見る（初めての方におすすめ）", use_container_width=True):
+    if st.button("🎬 実際に体験する（3分デモモード）", use_container_width=True):
         st.info("💡 デモモードで遊び方を体験できます！")
         # デモ用プレイヤーを自動生成
         demo_players = [
@@ -1297,7 +1310,9 @@ with col_feedback:
 
 with col_author:
     st.markdown("### 👤 作者について")
-    st.markdown("""
+    
+    # カスタマイズ可能な自己紹介文
+    author_bio = st.secrets.get("AUTHOR_BIO", """
     **真摯にユーザーの声に向き合う開発者**
     
     このアプリは100件のフィードバックに
@@ -1305,6 +1320,7 @@ with col_author:
     
     改善のプロセスを全て公開していきます。
     """)
+    st.markdown(author_bio)
     
     # SNSリンク
     st.markdown("**フォローして開発を応援:**")
@@ -1314,10 +1330,15 @@ with col_author:
     st.markdown(f"🐦 [Twitter/X](https://twitter.com/{twitter_username})")
     st.markdown(f"💻 [GitHub](https://github.com/{github_username})")
     
-    # オプション: 投げ銭リンク
+    # オプション: 追加リンク
     buymeacoffee = st.secrets.get("BUYMEACOFFEE_USERNAME", "")
     if buymeacoffee:
         st.markdown(f"☕ [Buy me a coffee](https://www.buymeacoffee.com/{buymeacoffee})")
+    
+    # オプション: ポートフォリオやブログ
+    portfolio_url = st.secrets.get("PORTFOLIO_URL", "")
+    if portfolio_url:
+        st.markdown(f"🌐 [ポートフォリオ]({portfolio_url})")
 
 st.markdown("---")
 st.caption("Made with ❤️ by a developer who listens | v1.0.0")
