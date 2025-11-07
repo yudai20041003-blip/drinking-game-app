@@ -19,6 +19,20 @@ except ImportError:
 # ページ設定
 st.set_page_config(page_title="🍶 AIルーレット飲みゲーム", page_icon="🍶", layout="wide")
 
+# Google Analytics 4 トラッキング
+GA_TRACKING_ID = st.secrets.get("GA_TRACKING_ID", "")
+if GA_TRACKING_ID:
+    components.html(f"""
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id={GA_TRACKING_ID}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){{dataLayer.push(arguments);}}
+      gtag('js', new Date());
+      gtag('config', '{GA_TRACKING_ID}');
+    </script>
+    """, height=0)
+
 # スマホ対応の高度なCSS実装
 st.markdown("""
 <style>
@@ -641,6 +655,14 @@ def display_status():
 st.title("🍶 AIルーレット飲みゲーム")
 st.caption("スマホ対応・口頭クイズ＆顔写真ルーレット機能付き！")
 
+# セッションステート初期化
+if 'demo_mode' not in st.session_state:
+    st.session_state.demo_mode = False
+
+# デモモード通知
+if st.session_state.demo_mode and st.session_state.game_state == 'playing':
+    st.info("🎬 デモモード中（3ラウンド体験版） | 実際のゲームを開始するにはメニューから「新しいゲームを開始」を選択してください")
+
 # メニュー画面
 if st.session_state.game_state == 'menu':
     st.markdown("---")
@@ -696,6 +718,27 @@ if st.session_state.game_state == 'menu':
             - 写真なしでも名前表示で遊べる
             """)
         
+        with st.expander("🚀 クイックスタートガイド（初めての方）", expanded=True):
+            st.markdown("""
+            **3ステップで簡単スタート！**
+            
+            1. **「🎬 3分デモを見る」をクリック**
+               - 架空のプレイヤーで遊び方を体験
+               - 3ラウンドだけサクッと試せる
+            
+            2. **「🆕 新しいゲームを開始」をクリック**
+               - 参加人数を選択（3〜12人）
+               - 名前と写真を登録
+               - 写真は任意（なしでもOK）
+            
+            3. **「🎲 ルーレットを回す」を押すだけ！**
+               - 選ばれた人が飲む
+               - クイズに挑戦（オプション）
+               - 15ラウンド楽しめる
+            
+            💡 **Tip**: デモモードで練習してから本番スタートがおすすめ！
+            """)
+        
         with st.expander("🌐 リモートプレイの方法", expanded=False):
             st.markdown("""
             **推奨方法: 画面共有**
@@ -729,6 +772,30 @@ if st.session_state.game_state == 'menu':
     
     st.markdown("---")
     
+    # デモモードボタン（初回ユーザー向け）
+    if st.button("🎬 3分デモを見る（初めての方におすすめ）", use_container_width=True):
+        st.info("💡 デモモードで遊び方を体験できます！")
+        # デモ用プレイヤーを自動生成
+        demo_players = [
+            {"name": "田中", "drunk_degree": 0, "total_drunk": 0, "cup_type": "おちょこ", "avatar_base64": None},
+            {"name": "佐藤", "drunk_degree": 0, "total_drunk": 0, "cup_type": "ジョッキ", "avatar_base64": None},
+            {"name": "鈴木", "drunk_degree": 0, "total_drunk": 0, "cup_type": "おちょこ", "avatar_base64": None},
+            {"name": "山田", "drunk_degree": 0, "total_drunk": 0, "cup_type": "どちらも", "avatar_base64": None},
+        ]
+        st.session_state.players = demo_players
+        st.session_state.game_state = 'playing'
+        st.session_state.round_count = 0
+        st.session_state.max_rounds = 3  # デモは3ラウンドのみ
+        st.session_state.had_sudden_event = False
+        st.session_state.last_picked_rounds = {}
+        st.session_state.quiz_phase = 'none'
+        st.session_state.demo_mode = True  # デモモードフラグ
+        st.success("🎬 デモモードで開始します！3ラウンドだけ体験できます。")
+        time.sleep(1)
+        st.rerun()
+    
+    st.markdown("---")
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -736,6 +803,7 @@ if st.session_state.game_state == 'menu':
             st.session_state.game_state = 'input_players'
             st.session_state.players = []
             st.session_state.last_picked_rounds = {}
+            st.session_state.demo_mode = False
             st.rerun()
     
     with col2:
@@ -749,6 +817,7 @@ if st.session_state.game_state == 'menu':
             st.session_state.had_sudden_event = False
             st.session_state.last_picked_rounds = {}
             st.session_state.quiz_phase = 'none'
+            st.session_state.demo_mode = False
             st.rerun()
 
 # プレイヤー入力画面（顔写真対応）
@@ -1148,6 +1217,27 @@ elif st.session_state.game_state == 'finished':
     
     st.markdown("---")
     
+    # シェア機能
+    st.markdown("### 📤 結果をシェアしよう！")
+    
+    # シェア用テキスト生成
+    share_text = f"🍶 AIルーレット飲みゲームで遊んだ！\n\n🥇 優勝: {winner['name']}\n酔い度: {winner['drunk_degree']:.1f}%\n\nあなたも遊んでみませんか？"
+    app_url = st.secrets.get("APP_URL", "https://drinking-game-app.streamlit.app")  # デプロイ後に設定
+    
+    col_share1, col_share2 = st.columns(2)
+    
+    with col_share1:
+        # Twitterシェアボタン
+        twitter_url = f"https://twitter.com/intent/tweet?text={share_text}&url={app_url}"
+        st.markdown(f"[![Twitter]( https://img.shields.io/badge/Twitter-シェア-1DA1F2?style=for-the-badge&logo=twitter)]({twitter_url})")
+    
+    with col_share2:
+        # LINEシェアボタン
+        line_url = f"https://line.me/R/msg/text/?{share_text}%20{app_url}"
+        st.markdown(f"[![LINE](https://img.shields.io/badge/LINE-シェア-00B900?style=for-the-badge&logo=line)]({line_url})")
+    
+    st.markdown("---")
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -1168,3 +1258,66 @@ elif st.session_state.game_state == 'finished':
         if st.button("🏠 メニューに戻る", use_container_width=True):
             st.session_state.game_state = 'menu'
             st.rerun()
+
+# =====================================
+# フッター: 作者情報とフィードバック
+# =====================================
+st.markdown("---")
+st.markdown("---")
+
+col_feedback, col_author = st.columns(2)
+
+with col_feedback:
+    st.markdown("### 📝 フィードバック募集中！")
+    st.markdown("""
+    **あなたの声でこのアプリは進化します！**
+    
+    - 使ってみた感想
+    - 欲しい機能
+    - バグ報告
+    - その他なんでも
+    
+    100件のフィードバックに全て応えます！
+    """)
+    
+    # フィードバックカウンター（初期値）
+    feedback_count = st.secrets.get("FEEDBACK_COUNT", 0)
+    remaining = 100 - feedback_count
+    
+    if remaining > 0:
+        st.progress(feedback_count / 100)
+        st.caption(f"現在のフィードバック数: {feedback_count}/100 （あと{remaining}件！）")
+    else:
+        st.success("🎉 100件達成！ありがとうございます！")
+    
+    # Twitter/Xでフィードバック
+    st.markdown("**Xでフィードバック:**")
+    twitter_username = st.secrets.get("TWITTER_USERNAME", "your_twitter")
+    st.markdown(f"[@{twitter_username}](https://twitter.com/{twitter_username}) にメンション")
+
+with col_author:
+    st.markdown("### 👤 作者について")
+    st.markdown("""
+    **真摯にユーザーの声に向き合う開発者**
+    
+    このアプリは100件のフィードバックに
+    全て応える実験プロジェクトです。
+    
+    改善のプロセスを全て公開していきます。
+    """)
+    
+    # SNSリンク
+    st.markdown("**フォローして開発を応援:**")
+    twitter_username = st.secrets.get("TWITTER_USERNAME", "your_twitter")
+    github_username = st.secrets.get("GITHUB_USERNAME", "yudai20041003-blip")
+    
+    st.markdown(f"🐦 [Twitter/X](https://twitter.com/{twitter_username})")
+    st.markdown(f"💻 [GitHub](https://github.com/{github_username})")
+    
+    # オプション: 投げ銭リンク
+    buymeacoffee = st.secrets.get("BUYMEACOFFEE_USERNAME", "")
+    if buymeacoffee:
+        st.markdown(f"☕ [Buy me a coffee](https://www.buymeacoffee.com/{buymeacoffee})")
+
+st.markdown("---")
+st.caption("Made with ❤️ by a developer who listens | v1.0.0")
